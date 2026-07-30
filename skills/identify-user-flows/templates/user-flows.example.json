@@ -1,0 +1,45 @@
+{
+  "schema_version": "1.0",
+  "name": "MAGO",
+  "baseUrl": "http://localhost",
+  "generated_at": "2026-07-30",
+  "source": "docs/recon/features/*.json",
+  "paceFactor": 1.0,
+  "defaultTimeoutMs": 15000,
+  "viewports": {
+    "desktop": { "width": 1920, "height": 1080 },
+    "mobile": { "width": 360, "height": 780 }
+  },
+  "auth": {
+    "kind": "form",
+    "loginPath": "/login",
+    "email": "${RECON_APP_USER}",
+    "password": "${RECON_APP_PASS}",
+    "emailSelector": "#email",
+    "passwordSelector": "#password",
+    "submitSelector": "button[type=submit]",
+    "successPath": "/dashboard"
+  },
+  "cross_feature_flows": [
+    {
+      "id": "00-onboarding-first-campaign-desktop",
+      "features": ["auth", "brands", "campaigns"],
+      "viewport": "desktop",
+      "kind": "primary",
+      "title": "Sign up, create a brand, and reach the first campaign.",
+      "path": "/register",
+      "description": "The journey no single feature owns: registration hands off to brand setup, which is what the campaign builder needs before it will do anything. It is the flow that decides whether a new account ever reaches value, and the one most likely to break when any of the three features changes. Selectors read from the register and brand-setup page components.",
+      "requires": ["a mail catcher or disabled email verification"],
+      "include_in_demo": true,
+      "interactions": [
+        { "kind": "type", "selector": "input[name='email']", "text": "recon+demo@example.com" },
+        { "kind": "type", "selector": "input[name='password']", "text": "recon-demo-pass" },
+        { "kind": "click", "selector": "button[type=submit]" },
+        { "kind": "expect", "urlContains": "/onboarding" },
+        { "kind": "type", "selector": "input[name='brand_name']", "text": "Northwind" },
+        { "kind": "click", "selector": "button:has-text('Continue')" },
+        { "kind": "expect", "selector": "[data-testid='campaign-builder']" }
+      ]
+    }
+  ]
+}

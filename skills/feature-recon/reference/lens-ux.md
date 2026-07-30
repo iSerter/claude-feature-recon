@@ -100,7 +100,10 @@ This is the lens most at risk of filing taste as defect. None of these go in the
   screens". If the change is a design decision rather than a repair, it belongs in `open_questions`.
 - **Component or library choices**, and any suggestion to adopt a design system.
 - **Responsive or browser issues you did not read in the code.** You are reading source, not
-  rendering. If it needs a browser to confirm, put the probe in `open_questions`.
+  rendering. If it needs a browser to confirm, put the probe in `open_questions` — and write it as a
+  question a browser could answer ("does the list render anything for an account with no items?"),
+  because `/identify-user-flows` reads these and turns them into flows the `e2e` lens actually runs.
+  A well-written probe here is the cheapest way to get a real answer later.
 - **Accessibility audits by rule number.** Cite the control and what a keyboard or screen-reader user
   cannot do; do not paste WCAG criteria at code you did not trace.
 - **A missing feature the product never claimed.** That is a feature request, not a gap.

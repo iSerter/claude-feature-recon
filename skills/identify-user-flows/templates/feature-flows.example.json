@@ -1,0 +1,60 @@
+{
+  "schema_version": "1.0",
+  "feature": "lead-magnets",
+  "generated_at": "2026-07-30",
+  "user_flows": [
+    {
+      "id": "01-lead-magnets-browse-desktop",
+      "viewport": "desktop",
+      "kind": "primary",
+      "title": "Find an existing lead magnet and open it.",
+      "path": "/lead-magnets",
+      "description": "The index is where someone lands when they want to reuse what they already made. The list has to render with real rows, and opening one has to reach its detail page. Selectors read from resources/js/pages/lead-magnets/index.tsx, which puts data-testid on the row and on the stat cards.",
+      "requires": ["at least one lead magnet exists"],
+      "include_in_demo": true,
+      "interactions": [
+        { "kind": "wait", "ms": 900 },
+        { "kind": "expect", "selector": "[data-testid='lead-magnet-row']" },
+        { "kind": "hover", "selector": "[data-testid='stat-card']", "nth": 0 },
+        { "kind": "scroll", "dy": 700 },
+        { "kind": "click", "selector": "[data-testid='lead-magnet-row']", "nth": 0 },
+        { "kind": "expect", "urlContains": "/lead-magnets/" }
+      ]
+    },
+    {
+      "id": "02-lead-magnets-generate-desktop",
+      "viewport": "desktop",
+      "kind": "primary",
+      "title": "Generate a new lead magnet from an existing brand.",
+      "path": "/lead-magnets",
+      "description": "The flow the feature exists for. The sweep marked it partial because the PDF step fails for brands with no logo, so this flow either confirms that finding with a screenshot or retires it. The form field names come from the create page component.",
+      "requires": ["at least one brand exists"],
+      "include_in_demo": true,
+      "holdMs": 1400,
+      "interactions": [
+        { "kind": "click", "selector": "a:has-text('New lead magnet')" },
+        { "kind": "waitFor", "selector": "input[name='title']" },
+        { "kind": "type", "selector": "input[name='title']", "text": "Spring checklist" },
+        { "kind": "select", "selector": "select[name='brand_id']", "value": "1" },
+        { "kind": "click", "selector": "button:has-text('Generate')" },
+        { "kind": "expect", "selector": "[data-testid='generation-status']", "text": "Complete", "timeout": 60000 },
+        { "kind": "expect", "selector": "[data-testid='error-banner']", "not": true }
+      ]
+    },
+    {
+      "id": "03-lead-magnets-empty-mobile",
+      "viewport": "mobile",
+      "kind": "edge",
+      "title": "See what a brand-new account with no lead magnets is shown.",
+      "path": "/lead-magnets",
+      "description": "The UX lens parked this in open_questions because an empty state can only be confirmed in a browser. If nothing renders, the first thing a new user meets is a blank page with no way forward.",
+      "requires": ["an account with no lead magnets"],
+      "include_in_demo": false,
+      "interactions": [
+        { "kind": "wait", "ms": 700 },
+        { "kind": "expect", "selector": "[data-testid='empty-state']" },
+        { "kind": "expect", "selector": "a:has-text('New lead magnet')" }
+      ]
+    }
+  ]
+}

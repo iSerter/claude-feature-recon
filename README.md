@@ -26,9 +26,26 @@ Python and JavaScript builders are ports of each other and emit byte-identical r
 standard-library only, nothing to install. Force one with `FEATURE_RECON_RUNTIME=node`. With
 neither runtime the sweep still produces the JSON state files; only the HTML render is skipped.
 
+The three **browser** commands need more, because they drive a real application:
+
+| Needed by | Dependency |
+|---|---|
+| `/identify-user-flows`, `/test-user-flows`, `/create-demo-videos` | `node` 20+ and Playwright with Chromium |
+| `/create-demo-videos` | `ffmpeg` + `ffprobe` |
+| Narration (optional) | `GOOGLE_GENAI_API_KEY` or `GEMINI_API_KEY` — without it the videos render silent |
+
+```sh
+sh <plugin>/scripts/install-deps.sh             # report what is missing, install nothing
+sh <plugin>/scripts/install-deps.sh --install   # install Playwright + Chromium into the plugin
+```
+
+Playwright is resolved from the plugin's own `node_modules` first and from the project being
+reviewed second, so a repo that already uses Playwright needs no second copy. **None of this is
+needed for `/feature-recon` or `/feature-tasks`** — the static sweep is unchanged.
+
 ## Use
 
-Two commands: one surveys, one turns the survey into work.
+Five commands. Two read the code, two drive the app, one turns findings into work.
 
 ```
 /feature-recon                          # discover features, confirm the list, sweep everything
@@ -46,8 +63,20 @@ Two commands: one surveys, one turns the survey into work.
 /feature-tasks --out tasks/q3           # write somewhere other than tasks/
 ```
 
-Both also trigger on plain requests — "review the state of this project", "which features are
-untested", "turn the recon findings into tasks", "what should we fix first".
+Then, against the running app:
+
+```
+/identify-user-flows                    # turn the report's flows into replayable recipes
+/test-user-flows                        # run them in a real browser, file what breaks
+/test-user-flows --feature billing      # re-run one feature's flows
+/test-user-flows --headed --retries 1   # watch it, and retry failures once
+
+/create-demo-videos                     # film the flows that passed, narrated
+/create-demo-videos --feature billing   # one feature only
+```
+
+They also trigger on plain requests — "review the state of this project", "which features are
+untested", "what should we fix first", "do the flows actually work", "make me a demo video".
 
 ## What you get
 
@@ -58,6 +87,19 @@ docs/recon/
   features/{slug}.security.json   only with --lens security
   features/{slug}.ux.json         only with --lens ux
   recon-report.html               the dashboard — one file, opens by double-click, works offline
+```
+
+and, once the browser commands have run:
+
+```
+docs/recon/
+  user-flows.json                 shared config (base URL, viewports, auth) + cross-feature flows
+  flows/{slug}.json               one per feature: replayable recipes with real selectors
+  e2e-test-results.json           what happened in the browser: per-step status, console, network
+  e2e-artifacts/{flowId}/         failure screenshot, Playwright trace, video — only for what failed
+  features/{slug}.e2e.json        what it meant: findings, cited to path:line, merged into the report
+  demo-videos.json                scenes and narration
+  videos/demo/{videoId}.mp4       one narrated video per feature
 ```
 
 Each finding carries a stable id (`billing-bug-01`), an effort estimate, and the evidence it came
@@ -74,6 +116,7 @@ filed it. Re-running one lens leaves the others alone.
 | Product engineer | default | Does this work for a real user, and what will page someone at 3am | 10 bugs, 8 gaps, 6 opps |
 | Security | `--lens security` | The guard rather than the flow: authz depth, tenancy, injection at a named sink, SSRF, secrets, what leaks | 6 bugs, 5 gaps, 3 opps |
 | UI/UX | `--lens ux` | The states nobody wrote: empty, loading, error, partial; destructive actions, keyboard and label defects (`a11y`) | 6 bugs, 5 gaps, 3 opps |
+| Live browser | `/test-user-flows` | What actually happens when a real browser walks the flow | 6 bugs, 5 gaps, 3 opps |
 
 **The product lens is the default and the specialists are opt-in, because the cost is multiplicative:**
 three lenses across sixteen features is 48 subagents. Above ~20 agents the sweep states the number and
@@ -92,6 +135,50 @@ tasks/
 
 Each task carries the finding ids it closes, the mechanism, cited `path:line` evidence, a
 choke-point fix plan, named test cases, and the steps to update the report when it merges.
+
+## The live-browser lens
+
+Everything above is a code read. These three commands open the app.
+
+```
+/identify-user-flows  →  /test-user-flows  →  /create-demo-videos
+   recipes                 results + findings      narrated mp4s
+```
+
+**1. Recipes.** The sweep already described each feature's flows in prose and said where each one
+stops. `/identify-user-flows` turns those sentences into recipes a browser can replay — with real
+selectors, read out of the page components, never invented. The UX and security lenses are told to
+park anything needing a browser in `open_questions`; those parked probes are picked up here and
+become flows.
+
+Every flow must carry at least one `expect` step. A recipe of hovers and scrolls always passes and
+therefore verifies nothing.
+
+**2. Results, then findings.** `/test-user-flows` replays them and records what happened. It never
+stops on a failure — the second failure is often what explains the first. Three outcomes, and the
+distinction is the point:
+
+| | Meaning | Whose problem |
+|---|---|---|
+| `passed` | Every assertion held | — |
+| `failed` | An `expect` did not hold | The application |
+| `blocked` | Never reached an assertion — stale selector, missing data, page would not open | The recipe or the environment |
+
+Then an agent traces each failure back into the source and files it as an ordinary finding with a
+`path:line`, so it lands in the same dashboard as everything else, tagged **Live browser**. A raw
+timeout is not a bug report; the trace is the valuable part.
+
+This is the only lens that can **retire** a finding. When a flow completes where the product lens
+predicted a break, that finding was wrong and gets deleted — which no amount of re-reading the code
+could have established.
+
+**3. Videos.** `/create-demo-videos` films the flows that **passed**, one mp4 per feature: Playwright
+drives the real UI with a visible cursor, Gemini TTS narrates each scene, ffmpeg cuts it together.
+A flow that failed is never filmed — that would be a recording of a bug presented as a feature — and
+the narration is bounded by what the report says actually works.
+
+Both browser commands drive the app through the same interaction code, so the flow the suite
+verified is the flow the camera films.
 
 ## How it works
 
@@ -176,15 +263,34 @@ out of the repo and the check goes quiet, since nothing is left to resolve again
 | `skills/feature-tasks/SKILL.md` | the findings → tasks procedure |
 | `skills/feature-tasks/templates/task.md` | one task file's shape |
 | `skills/feature-tasks/templates/index.md` | the fix-set index's shape |
-| `commands/feature-recon.md`, `commands/feature-tasks.md` | the two slash-command entry points |
+| `skills/identify-user-flows/SKILL.md` | the flows → recipes procedure |
+| `skills/identify-user-flows/reference/flow-spec.md` | the recipe contract, handed to each subagent |
+| `skills/test-user-flows/SKILL.md` | the run + triage procedure |
+| `skills/test-user-flows/run_flows.mjs` | the Playwright runner (`--check` validates recipes offline) |
+| `skills/create-demo-videos/SKILL.md` | the recording procedure |
+| `skills/create-demo-videos/capture.mjs` · `tts.mjs` · `build.mjs` | record → narrate → cut |
+| `agents/recon-test-engineer.md` | writes the recipes, and turns a run into findings |
+| `agents/recon-feature-explainer.md` | writes the narration |
+| `lib/flows.mjs` | the interaction vocabulary, auth and cursor — shared by both browser skills |
+| `lib/common.mjs`, `lib/recipes.mjs`, `lib/preflight.mjs` | CLI parsing + content-hash cache, recipe loading, dependency checks |
+| `scripts/install-deps.sh` | checks (and optionally installs) node / Playwright / ffmpeg |
+| `commands/*.md` | the five slash-command entry points |
 
 ## Limits
 
-- Static analysis only: no app runtime, no database, no test execution. Nothing here depends on a
-  test passing — if you want that signal, run the suite yourself and re-sweep.
-- Snapshot, not a time series. Commit `docs/recon/` and `git log` is your history.
+- **The sweep is static.** `/feature-recon` reads code: no app runtime, no database, no test
+  execution. Every finding it files is an inference about what the code would do.
+- **The browser commands are the exception, and they are narrow.** `/test-user-flows` drives real
+  flows as a normal signed-in user and reports what it saw. It does not fuzz, attack, or probe for
+  vulnerabilities; it runs no existing test suite; it only knows about flows somebody wrote a recipe
+  for. A feature with no flows is not a feature that works.
+- A `blocked` flow tells you the recipe or the environment is wrong, not the feature. Recipes go
+  stale as the UI changes and need maintaining like any other test.
+- Snapshot, not a time series. Commit `docs/recon/` and `git log` is your history. The `videos/`,
+  `e2e-artifacts/` and `.auth.json` outputs are large or sensitive — gitignore them.
 - Costs scale with feature count **times lens count** — a 16-feature sweep is 16 subagents' worth of
   reading, and `--lens all` is 48. The specialists are default-off for exactly this reason.
+- Chromium only. No visual-regression diffing, no captions on the videos.
 
 ## License
 

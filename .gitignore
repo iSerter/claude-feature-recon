@@ -1,0 +1,6 @@
+# Installed by scripts/install-deps.sh so the browser-driven skills can resolve Playwright
+# from the plugin itself. Never committed — the browser binaries alone are hundreds of MB.
+node_modules/
+package-lock.json
+
+.DS_Store

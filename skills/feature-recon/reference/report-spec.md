@@ -236,9 +236,20 @@ last would win — so each writes its own, and the build script merges them by `
 | `product` (default) | `features/{slug}.json` | `{slug}-bug-01` | 10 bugs, 8 gaps, 6 opps |
 | `security` | `features/{slug}.security.json` | `{slug}-sec-bug-01` | 6 bugs, 5 gaps, 3 opps |
 | `ux` | `features/{slug}.ux.json` | `{slug}-ux-bug-01` | 6 bugs, 5 gaps, 3 opps |
+| `e2e` | `features/{slug}.e2e.json` | `{slug}-e2e-bug-01` | 6 bugs, 5 gaps, 3 opps |
 
 The specialists' method lives in `lens-security.md` and `lens-ux.md`; this file stays the single
-contract for the *shape*. Both are opt-in — the product lens alone is what a plain sweep runs.
+contract for the *shape*. All three are opt-in — the product lens alone is what a plain sweep runs.
+
+`e2e` is the odd one out: it is written by `/test-user-flows` from an actual browser run rather than
+from reading source, so its findings were *reproduced* rather than inferred. It still obeys every
+rule here — a `path:line` in `evidence[]` is mandatory, and a raw timeout with no traced mechanism is
+not a finding. The run record it came from lives outside this schema, in
+`<recon-dir>/e2e-test-results.json`; findings point back at it by flow id in `repro`.
+
+Because it can see the application actually working, it is also the only lens that can **retire** a
+finding: a flow that completes where the product lens predicted a break means that finding gets
+deleted per section 5, not filed twice.
 
 What the merge does, so you can predict the report from the files:
 
@@ -264,7 +275,7 @@ touching the others.
   - `production_ready` = flows + tests + error handling.
 - `confidence`: `high` | `medium` | `low` — calibrated in section 1, not a vibe
 - `severity`: `critical` | `high` | `medium` | `low` — anchors in section 1; spread them
-- `lens`: `product` | `security` | `ux` — absent means `product`
+- `lens`: `product` | `security` | `ux` | `e2e` — absent means `product`
 - `bug.type`: `runtime_error` | `logic` | `data_integrity` | `security` | `performance` | `ux` | `a11y` | `regression`
   - `a11y` = keyboard, focus, labelling or screen-reader defect. `ux` = anything else the user sees.
 - `gap.kind`: `missing_feature` | `missing_validation` | `missing_tests` | `missing_error_handling` | `missing_ui` | `unwired` (backend exists with no UI, or vice versa)

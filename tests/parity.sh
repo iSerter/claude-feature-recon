@@ -133,6 +133,26 @@ EOF
   "gaps": [], "opportunities": [], "dependencies": [], "open_questions": []
 }
 EOF
+  # Same slug, e2e lens: the only lens written from a live browser run rather than a static read.
+  # Its findings still carry path:line evidence, so it merges exactly like the other specialists.
+  cat > "$1/features/billing.e2e.json" <<'EOF'
+{
+  "schema_version": "1.0", "slug": "billing", "name": "Billing", "reviewed_at": "2026-07-30",
+  "lens": "e2e", "maturity": "stub", "confidence": "high",
+  "state_summary": "Refund flow 500s in the browser, confirming the static read.",
+  "surface": {"routes": ["POST /billing/refund"]},
+  "coverage": {"test_files": [], "tested_paths": ["charge"], "untested_paths": [],
+               "not_inspected": ["3DS challenge"]},
+  "user_flows": [{"name": "Refund end to end", "status": "broken",
+                  "breaks_at": "POST /billing/refund returned 500", "evidence": ["b.php:4"]}],
+  "bugs": [
+    {"id": "billing-e2e-bug-01", "title": "Refund returns 500 in the browser",
+     "severity": "high", "type": "runtime_error", "description": "d", "repro": "r", "impact": "i",
+     "evidence": ["b.php:1"], "suggested_fix": "f", "effort": "M", "confidence": "high"}
+  ],
+  "gaps": [], "opportunities": [], "dependencies": [], "open_questions": []
+}
+EOF
   # A feature no product lens ever read: the builder must fall back to the most confident
   # specialist (ux, high) for maturity and warn about it.
   cat > "$1/features/auth.security.json" <<'EOF'
@@ -225,10 +245,10 @@ if [ "$have_py" = 1 ] && [ "$have_js" = 1 ]; then
   # --- the merge -----------------------------------------------------------------------------
   grep -q "features/auth: no product-lens file" "$tmp/py.err" \
     || fail "a feature with only specialist lens files must warn"
-  grep -q "3 features, 6 bugs, 2 critical, 2 gaps, 1 opportunities" "$tmp/py.out" \
+  grep -q "3 features, 7 bugs, 2 critical, 2 gaps, 1 opportunities" "$tmp/py.out" \
     || fail "merged totals are wrong: $(cat "$tmp/py.out")"
 
-  # One row per feature, not per lens file; billing's four bugs come from three files; and the
+  # One row per feature, not per lens file; billing's five bugs come from four files; and the
   # product lens owns the maturity even though the security lens rated the same feature a stub.
   merged=$(python3 - "$tmp/py/project.json" <<'PY'
 import json, sys
@@ -237,16 +257,17 @@ b = [f for f in d["features"] if f["slug"] == "billing"][0]
 print(len(d["features"]), b["maturity"], b["counts"]["bugs"])
 PY
 )
-  [ "$merged" = "3 alpha 4" ] || fail "billing's three lens files did not merge: $merged"
+  [ "$merged" = "3 alpha 5" ] || fail "billing's four lens files did not merge: $merged"
 
   # What the dashboard renders from: the data island. The chip and filter themselves are drawn by
   # the template's JS, which nothing here can execute — these check the inputs it draws them from.
   h="$tmp/py/recon-report.html"
   grep -q '"lens":"security"' "$h" || fail "findings reach the dashboard with no lens attribution"
-  grep -q '"lenses":\["product","security","ux"\]' "$h" \
+  grep -q '"lenses":\["product","security","ux","e2e"\]' "$h" \
     || fail "the merged feature does not tell the dashboard which lenses reviewed it"
   grep -q "billing-sec-bug-01" "$h" || fail "a specialist lens's finding is missing from the report"
-  echo "PASS per-lens files merge (billing ×3, auth fallback, lens attribution in the payload)"
+  grep -q '"lens":"e2e"' "$h" || fail "the live-browser lens is missing from the report payload"
+  echo "PASS per-lens files merge (billing ×4, auth fallback, lens attribution in the payload)"
 
   # A report must rebuild identically from its own rewritten project.json (idempotence), and
   # the other runtime must accept what this one wrote.

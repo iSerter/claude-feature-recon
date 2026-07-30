@@ -126,7 +126,10 @@ disbelieved. None of these go in the file:
 - **Compliance gaps** (SOC 2, GDPR text, audit logging as policy) unless the missing control has a
   concrete abuse path in this feature.
 - **Anything you would have to run, fuzz or attack to confirm.** This is a static review. If it needs
-  a live probe, file it as an `open_question` naming the probe.
+  a live probe, file it as an `open_question` naming the probe. Name it precisely: `/identify-user-flows`
+  reads these and can turn a probe that only needs a *normal user doing a normal thing* into a flow
+  the `e2e` lens runs for real. It will not fuzz or attack anything, so a probe that requires either
+  stays an open question.
 
 **Bug self-test for this lens:** name the actor, the request they send, and what they get that they
 should not. If you cannot fill all three, it is not a security bug — downgrade it to an opportunity

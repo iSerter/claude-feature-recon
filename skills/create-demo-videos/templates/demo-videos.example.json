@@ -1,0 +1,55 @@
+{
+  "schema_version": "1.0",
+  "name": "MAGO",
+  "source": "docs/recon/flows/*.json",
+  "generated_at": "2026-07-30",
+  "fps": 30,
+  "voice": "Kore",
+  "voiceStyle": "Read in a warm, clear, confident product-demo voice, unhurried:",
+  "ttsModel": "gemini-3.1-flash-tts-preview",
+  "paceFactor": 1.3,
+  "leadSec": 0.4,
+  "tailSec": 0.6,
+  "maxDeadAirSec": 2.5,
+  "music": null,
+  "videos": [
+    {
+      "id": "01-lead-magnets",
+      "feature": "lead-magnets",
+      "title": "Lead Magnets",
+      "viewport": "desktop",
+      "scenes": [
+        {
+          "id": "01-lead-magnets-browse",
+          "user_flow_id": "01-lead-magnets-browse-desktop",
+          "path": "/lead-magnets",
+          "narration": "Everything you have published lives here, so you can see at a glance which pieces are still pulling their weight and which have gone quiet.",
+          "leadInMs": 700,
+          "holdMs": 1200,
+          "voice": null,
+          "interactions": [
+            { "kind": "wait", "ms": 900 },
+            { "kind": "hover", "selector": "[data-testid='stat-card']", "nth": 0 },
+            { "kind": "scroll", "dy": 700 },
+            { "kind": "click", "selector": "[data-testid='lead-magnet-row']", "nth": 0 }
+          ]
+        },
+        {
+          "id": "02-lead-magnets-generate",
+          "user_flow_id": "02-lead-magnets-generate-desktop",
+          "path": "/lead-magnets",
+          "narration": "Making a new one takes a title and a brand. The writing, the layout and the download page come back finished, in the voice you already set up once.",
+          "holdMs": 1400,
+          "interactions": [
+            { "kind": "click", "selector": "a:has-text('New lead magnet')" },
+            { "kind": "waitFor", "selector": "input[name='title']" },
+            { "kind": "type", "selector": "input[name='title']", "text": "Spring checklist" },
+            { "kind": "select", "selector": "select[name='brand_id']", "value": "1" },
+            { "kind": "click", "selector": "button:has-text('Generate')" },
+            { "kind": "wait", "ms": 2000 }
+          ]
+        }
+      ]
+    }
+  ]
+}

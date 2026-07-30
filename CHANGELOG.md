@@ -6,6 +6,76 @@ The `version` field in `.claude-plugin/plugin.json` is what Claude Code uses as 
 key: **users receive changes only when it is bumped.** Pushing commits without bumping it makes
 `/plugin update` report "already at the latest version". So every release here is one version bump.
 
+## [0.5.0] — 2026-07-30
+
+The app opens. Until now every finding in a report was an inference from reading code — accurate
+often enough to be useful, and impossible to confirm without a human going and clicking. Three new
+commands drive the actual application: they turn the sweep's prose descriptions of user flows into
+replayable recipes, run them in Chromium, and record what happened. Findings that come back are
+things that were *reproduced*, with a screenshot.
+
+The same recipes then film the product. A flow that passes is a flow worth demoing, so
+`/create-demo-videos` records the ones that work, narrates them, and cuts one mp4 per feature.
+
+**Nothing about the static sweep changes.** `/feature-recon` and `/feature-tasks` behave exactly as
+before, need no new dependencies, and a report with no browser run renders identically.
+
+### Added
+
+- **`/identify-user-flows`** — turns each feature's `user_flows[]` prose, plus the browser probes the
+  UX and security lenses parked in `open_questions[]`, into executable recipes. Writes
+  `<recon-dir>/flows/{slug}.json` per feature and `<recon-dir>/user-flows.json` for shared config
+  and cross-feature journeys. Every selector is read out of the page source; none is invented, and
+  none is added to the application to make a flow work.
+- **`/test-user-flows`** — replays the recipes in Chromium and writes `e2e-test-results.json`
+  (per-step status, console errors, failed requests, artifacts) plus `features/{slug}.e2e.json`
+  (findings, cited to `path:line`). A failure never halts the suite; the second failure is often what
+  explains the first. `--check` validates every recipe without opening a browser.
+- **`/create-demo-videos`** — records one narrated mp4 per feature into `<recon-dir>/videos/demo/`,
+  with a visible cursor and click pulses. Only flows that **passed** are eligible.
+- **The `e2e` review lens**, labelled *Live browser* in the dashboard. It merges into the report like
+  any other lens, so runtime-confirmed defects sit next to static ones and the lens filter can
+  separate them.
+- **`agents/recon-test-engineer.md`** — writes the recipes, and turns a run's raw results into
+  findings by tracing each failure back into the source.
+- **`agents/recon-feature-explainer.md`** — writes the narration, bounded by what the recon report
+  says actually works.
+- **`lib/`** — `flows.mjs` (the interaction vocabulary, auth, viewports, cursor overlay),
+  `recipes.mjs`, `common.mjs`, `preflight.mjs`. Both browser skills drive the app through this one
+  module, so the flow the suite verified is the flow the camera films.
+- **`scripts/install-deps.sh`** — reports what is missing (node 20+, Playwright, Chromium, ffmpeg,
+  TTS key) and installs the installable parts with `--install`.
+- An **`expect`** interaction kind — assertions on a selector, its text, its state, or the URL. A
+  recipe without one always passes and verifies nothing, so `identify-user-flows` requires at least
+  one per flow and `--check` rejects any that lack it.
+
+### Changed
+
+- `report-spec.md` gains the `e2e` row and explains what makes that lens different: it is the only
+  one that can **retire** a finding, because a flow completing where the product lens predicted a
+  break is evidence no amount of re-reading could produce.
+- `lens-ux.md` and `lens-security.md` keep their static-review rule, but now say where a parked
+  browser probe actually goes. The security lens is explicit that `e2e` runs normal user flows and
+  will not fuzz or attack anything.
+- README documents the new dependencies, and its **Limits** section no longer claims the plugin never
+  runs the app — it now draws the line around what the browser lens does and does not do.
+- Credentials are referenced as `${RECON_APP_USER}` / `${RECON_APP_PASS}` and resolved from the
+  environment, because the recon directory is meant to be committed. An unset variable fails the run
+  by name rather than becoming an empty password and a baffling login failure.
+
+### Fixed
+
+Two defects carried over from the walkthrough-video skill this pipeline was adapted from:
+
+- The capture cache ignored `leadInMs`, so changing a scene's lead-in silently reused the previous
+  clip. It is now part of the recipe hash.
+- A stored login session was reused without being checked, so an expired one produced a full run of
+  login-redirect screens with no error anywhere. It is now probed before reuse, and re-established
+  when stale.
+
+Also: pointer steps now honour the recipe's `defaultTimeoutMs` instead of falling back to
+Playwright's 30-second default, so a stale selector fails in seconds and names itself.
+
 ## [0.4.0] — 2026-07-30
 
 Review **lenses**. The sweep had one reviewer with ten things to check, so the items that lost were

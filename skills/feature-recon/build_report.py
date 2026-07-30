@@ -32,8 +32,9 @@ BUG_TYPE = ["runtime_error", "logic", "data_integrity", "security",
 GAP_KIND = ["missing_feature", "missing_validation", "missing_tests",
             "missing_error_handling", "missing_ui", "unwired"]
 # Review lenses, in report order. The product lens is the default and owns each feature's overall
-# rating; the rest are opt-in and write their own file per feature.
-LENS = ["product", "security", "ux"]
+# rating; the rest are opt-in and write their own file per feature. `e2e` is the only one written
+# from a live browser run rather than a static read.
+LENS = ["product", "security", "ux", "e2e"]
 FINDING_KINDS = ["bugs", "gaps", "opportunities"]
 
 FEATURE_KEYS = ["slug", "name", "maturity", "confidence", "state_summary", "surface",
