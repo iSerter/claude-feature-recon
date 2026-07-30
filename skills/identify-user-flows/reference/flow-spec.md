@@ -38,7 +38,7 @@ is a one-line edit rather than the same edit in eight files.
 ```json
 {
   "schema_version": "1.0",
-  "name": "MAGO",
+  "name": "Udeha",
   "baseUrl": "http://localhost",
   "generated_at": "2026-07-30",
   "source": "docs/recon/features/*.json",

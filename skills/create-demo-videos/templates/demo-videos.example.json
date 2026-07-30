@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "name": "MAGO",
+  "name": "Udeha",
   "source": "docs/recon/flows/*.json",
   "generated_at": "2026-07-30",
   "fps": 30,
