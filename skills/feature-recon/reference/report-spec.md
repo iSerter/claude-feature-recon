@@ -9,6 +9,10 @@ the build script validates them.
 - `<recon-dir>/features/{slug}.json` — one per feature
 - `<recon-dir>/project.json` — rollup + index (no duplicated finding bodies)
 
+A run may review the same feature through more than one **lens**. Each lens writes its own file and
+`build_report.sh` merges them (section 3a). The product lens — the method described here — is the
+default and the only one that runs unless the caller asks for more.
+
 ## 0. Stance and method
 
 **Who you are.** A senior product engineer doing a pre-handover readiness review of one feature you
@@ -147,6 +151,7 @@ report them and keep an ID attached to the same finding on re-runs.
   "slug": "lead-magnets",
   "name": "Lead Magnets",
   "reviewed_at": "2026-07-30",
+  "lens": "product",
   "maturity": "beta",
   "confidence": "high",
   "state_summary": "2-4 sentences: what it does today, how far the happy path gets, where it stops.",
@@ -217,8 +222,39 @@ report them and keep an ID attached to the same finding on re-runs.
 }
 ```
 
-All keys are required. Use `[]` for an empty list and `null` for `breaks_at` when a flow does not
-break. Omit nothing — the build script warns on missing keys.
+All keys are required except `lens`, which defaults to `product` when absent — every file written
+before lenses existed is still valid. Use `[]` for an empty list and `null` for `breaks_at` when a
+flow does not break. Omit nothing else — the build script warns on missing keys.
+
+### 3a. Lenses and per-lens files
+
+One feature can be reviewed by several lenses in one run. They cannot share a file — whoever wrote
+last would win — so each writes its own, and the build script merges them by `slug`:
+
+| Lens | File | Finding ids | Caps |
+|---|---|---|---|
+| `product` (default) | `features/{slug}.json` | `{slug}-bug-01` | 10 bugs, 8 gaps, 6 opps |
+| `security` | `features/{slug}.security.json` | `{slug}-sec-bug-01` | 6 bugs, 5 gaps, 3 opps |
+| `ux` | `features/{slug}.ux.json` | `{slug}-ux-bug-01` | 6 bugs, 5 gaps, 3 opps |
+
+The specialists' method lives in `lens-security.md` and `lens-ux.md`; this file stays the single
+contract for the *shape*. Both are opt-in — the product lens alone is what a plain sweep runs.
+
+What the merge does, so you can predict the report from the files:
+
+- `bugs`, `gaps`, `opportunities`, `user_flows` are concatenated, product lens first. Each finding is
+  stamped with the `lens` it came from.
+- `surface` and `coverage` lists are unioned, first occurrence kept.
+- `maturity`, `state_summary`, `confidence` and `dependencies` come from the **product lens** — a
+  specialist rates its own slice, not the feature's overall readiness. With no product-lens file in
+  the group the builder falls back to the highest-confidence member and warns.
+- `open_questions` are unioned; every lens's questions survive.
+- **A finding id used by two lenses of the same feature is an `ERROR`, not a warning.** Ids are how
+  `top_findings`, `cross_cutting` and `/feature-tasks` refer to findings; a collision makes the
+  reference ambiguous. Hence the `-sec-` / `-ux-` segments.
+
+Re-running one lens rewrites only its own file, so a thin specialist pass can be redone without
+touching the others.
 
 ### Enums (use these exact values)
 
@@ -228,7 +264,9 @@ break. Omit nothing — the build script warns on missing keys.
   - `production_ready` = flows + tests + error handling.
 - `confidence`: `high` | `medium` | `low` — calibrated in section 1, not a vibe
 - `severity`: `critical` | `high` | `medium` | `low` — anchors in section 1; spread them
-- `bug.type`: `runtime_error` | `logic` | `data_integrity` | `security` | `performance` | `ux` | `regression`
+- `lens`: `product` | `security` | `ux` — absent means `product`
+- `bug.type`: `runtime_error` | `logic` | `data_integrity` | `security` | `performance` | `ux` | `a11y` | `regression`
+  - `a11y` = keyboard, focus, labelling or screen-reader defect. `ux` = anything else the user sees.
 - `gap.kind`: `missing_feature` | `missing_validation` | `missing_tests` | `missing_error_handling` | `missing_ui` | `unwired` (backend exists with no UI, or vice versa)
 - `user_flows[].status`: `working` | `partial` | `broken` | `not_implemented`
 - `effort`: `S` (<1d) | `M` (1-3d) | `L` (>3d)
@@ -286,8 +324,10 @@ always match what is on disk.
 ## 5. Keeping the report current as fixes land
 
 Findings have no `status` field on purpose. When a finding is fixed, **delete it** from its feature
-file and re-run `build_report.sh`, which re-derives every `counts` and `totals` value from the
-feature files — never hand-edit those. Then prune the finding's id from `project.json`'s
+file — the id's lens segment tells you which one: `{slug}-sec-*` lives in `{slug}.security.json`,
+`{slug}-ux-*` in `{slug}.ux.json`, everything else in `{slug}.json` — and re-run `build_report.sh`,
+which re-derives every `counts` and `totals` value from the feature files; never hand-edit those.
+Then prune the finding's id from `project.json`'s
 `top_findings` and `recommended_sequence`, and from any `cross_cutting[].affects` it no longer
 applies to.
 
@@ -317,5 +357,6 @@ A last pass over your own work. Every item here is something the reader cannot c
 - **Read-only.** Do not fix anything you find; this produces the report only.
 - Valid JSON. No comments, no trailing commas. Every file must parse.
 - Be blunt. An honest `stub` beats a generous `beta`. `"bugs": []` is a legitimate result.
-- Caps per feature: 10 bugs, 8 gaps, 6 opportunities. Keep the highest-signal ones.
+- Caps per feature file: 10 bugs, 8 gaps, 6 opportunities for the product lens; 6/5/3 for a
+  specialist lens (section 3a). Keep the highest-signal ones.
 - Write the feature file as soon as that feature is done, before moving on.

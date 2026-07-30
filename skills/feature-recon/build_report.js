@@ -7,8 +7,9 @@
  *     node build_report.js --selftest
  *
  * Reads <recon-dir>/project.json and <recon-dir>/features/*.json, lints them against the
- * report spec, derives every count (so the model never has to do arithmetic), writes the
- * counts back into project.json, and injects the merged payload into template.html.
+ * report spec, merges the per-lens files of each feature into one, derives every count (so the
+ * model never has to do arithmetic), writes the counts back into project.json, and injects the
+ * merged payload into template.html.
  *
  * Node builtins only. No install step. Port of build_report.py — same CLI, same output
  * bytes; either script can build a report the other one built.
@@ -28,9 +29,13 @@ const PRIORITY = ["P0", "P1", "P2", "P3"];
 const VALUE = ["high", "medium", "low"];
 const FLOW_STATUS = ["working", "partial", "broken", "not_implemented"];
 const BUG_TYPE = ["runtime_error", "logic", "data_integrity", "security",
-  "performance", "ux", "regression"];
+  "performance", "ux", "a11y", "regression"];
 const GAP_KIND = ["missing_feature", "missing_validation", "missing_tests",
   "missing_error_handling", "missing_ui", "unwired"];
+// Review lenses, in report order. The product lens is the default and owns each feature's overall
+// rating; the rest are opt-in and write their own file per feature.
+const LENS = ["product", "security", "ux"];
+const FINDING_KINDS = ["bugs", "gaps", "opportunities"];
 
 const FEATURE_KEYS = ["slug", "name", "maturity", "confidence", "state_summary", "surface",
   "coverage", "user_flows", "bugs", "gaps", "opportunities",
@@ -224,15 +229,23 @@ function lintFeature(feature, file, problems, seenIds, citations) {
     checkEnum(problems, where, "opportunities[].priority", opp.priority, PRIORITY);
   }
 
-  for (const kind of ["bugs", "gaps", "opportunities"]) {
+  for (const kind of FINDING_KINDS) {
     for (const finding of feature[kind] || []) {
       const fid = finding.id;
       if (!fid) {
         problems.warn(`${where}: a ${kind.slice(0, -1)} has no id (${repr(finding.title)})`);
       } else if (seenIds.has(fid)) {
-        problems.warn(`${where}: duplicate finding id ${repr(fid)} (also in ${seenIds.get(fid)})`);
+        const [prevWhere, prevSlug] = seenIds.get(fid);
+        const msg = `${where}: duplicate finding id ${repr(fid)} (also in ${prevWhere})`;
+        // Across lens files of one feature the id is the only handle on a finding — for
+        // top_findings, cross_cutting and feature-tasks — so a collision there is fatal.
+        if (prevWhere !== where && prevSlug === feature.slug) {
+          problems.error(`${msg} — two lenses of the same feature cannot share an id`);
+        } else {
+          problems.warn(msg);
+        }
       } else {
-        seenIds.set(fid, where);
+        seenIds.set(fid, [where, feature.slug]);
       }
       const evidence = finding.evidence;
       const label = repr(fid || finding.title);
@@ -243,6 +256,130 @@ function lintFeature(feature, file, problems, seenIds, citations) {
       }
     }
   }
+}
+
+/**
+ * Read the lens off a feature filename: `billing.security` -> ['billing', 'security'].
+ *
+ * Returns [slug, null] when the stem carries no lens suffix, so `billing.json` keeps working.
+ */
+function splitLens(stem) {
+  const cut = stem.lastIndexOf(".");
+  if (cut !== -1 && LENS.includes(stem.slice(cut + 1))) {
+    return [stem.slice(0, cut), stem.slice(cut + 1)];
+  }
+  return [stem, null];
+}
+
+function asList(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+/**
+ * Concatenate, dropping strings the first list already has.
+ *
+ * Only strings are compared: nothing else in these lists (findings, flows) can be judged the same
+ * across two files without guessing, so duplicates of those are kept and the reader decides.
+ */
+function unionLists(first, second) {
+  const out = first.slice();
+  const seen = new Set(out.filter((x) => typeof x === "string"));
+  for (const item of second) {
+    if (typeof item === "string") {
+      if (seen.has(item)) continue;
+      seen.add(item);
+    }
+    out.push(item);
+  }
+  return out;
+}
+
+/** Union every list value of `other` into `target` (used for `surface` and `coverage`). */
+function mergeListsInto(target, other) {
+  for (const [key, value] of Object.entries(other)) {
+    if (!Array.isArray(value)) continue;
+    if (Array.isArray(target[key])) {
+      target[key] = unionLists(target[key], value);
+    } else if (!(key in target)) {
+      target[key] = value.slice();
+    }
+  }
+}
+
+/** Report order for lenses; anything unrecognised sorts last. */
+function lensRank(lens) {
+  const i = LENS.indexOf(lens);
+  return i === -1 ? LENS.length : i;
+}
+
+function confidenceRank(confidence) {
+  const i = CONFIDENCE.indexOf(confidence);
+  return i === -1 ? CONFIDENCE.length : i;
+}
+
+/**
+ * Collapse each slug's per-lens files into one feature object.
+ *
+ * Findings are concatenated with the product lens first and each one stamped with its source lens;
+ * `surface` and `coverage` lists are unioned; `maturity`, `state_summary`, `confidence` and
+ * `dependencies` come from the product lens, because a specialist rates its own slice and not the
+ * feature's overall readiness.
+ */
+function mergeLenses(groups, problems) {
+  const merged = [];
+
+  for (const [slug, members] of groups) {
+    members.sort((a, b) => {
+      const diff = lensRank(a.feature.lens) - lensRank(b.feature.lens);
+      if (diff !== 0) return diff;
+      return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
+    });
+    for (const member of members) {
+      for (const kind of FINDING_KINDS) {
+        for (const finding of asList(member.feature[kind])) {
+          if (finding && typeof finding === "object" && !Array.isArray(finding)) {
+            finding.lens = member.feature.lens;
+          }
+        }
+      }
+    }
+
+    let base = members.filter((m) => m.feature.lens === "product").map((m) => m.feature)[0];
+    if (base === undefined) {
+      // Nobody read this feature end to end, so no file in the group can speak for its
+      // maturity. Take the most confident one and say what happened.
+      let pick = members[0];
+      for (const member of members) {
+        if (confidenceRank(member.feature.confidence) < confidenceRank(pick.feature.confidence)) {
+          pick = member;
+        }
+      }
+      base = pick.feature;
+      problems.warn(`features/${slug}: no product-lens file — maturity, summary and ` +
+        `dependencies taken from ${pick.name}`);
+    }
+
+    for (const member of members) {
+      const feature = member.feature;
+      if (feature === base) continue;
+      for (const key of ["user_flows", "bugs", "gaps", "opportunities"]) {
+        base[key] = asList(base[key]).concat(asList(feature[key]));
+      }
+      base.open_questions = unionLists(asList(base.open_questions), asList(feature.open_questions));
+      for (const key of ["surface", "coverage"]) {
+        const other = feature[key];
+        if (other === null || typeof other !== "object" || Array.isArray(other)) continue;
+        const mine = base[key];
+        if (mine === null || typeof mine !== "object" || Array.isArray(mine)) base[key] = {};
+        mergeListsInto(base[key], other);
+      }
+    }
+
+    base.lenses = unionLists([], members.map((m) => m.feature.lens));
+    merged.push(base);
+  }
+
+  return merged;
 }
 
 /** Compute per-feature counts and project totals from the feature files. */
@@ -258,7 +395,7 @@ function derive(project, features, problems) {
   }
   for (const slug of bySlug.keys()) {
     if (!index.some((e) => e.slug === slug)) {
-      problems.warn(`features/${slug}.json exists but project.json does not index it`);
+      problems.warn(`feature ${repr(slug)} has a state file but project.json does not index it`);
     }
   }
 
@@ -313,7 +450,7 @@ function derive(project, features, problems) {
 
   const refs = new Set();
   for (const f of features) {
-    for (const kind of ["bugs", "gaps", "opportunities"]) {
+    for (const kind of FINDING_KINDS) {
       for (const x of f[kind] || []) refs.add(x.id);
     }
   }
@@ -387,15 +524,27 @@ function build(reconDir, outPath = null, templatePath = null) {
   }
 
   const citations = new Citations(reconDir);
-  const features = [];
+  const groups = new Map();
   const seenIds = new Map();
   for (const file of paths) {
     const feature = loadJson(file, problems);
     if (feature === null) continue;
-    if (!("slug" in feature)) feature.slug = path.basename(file, ".json");
+    const name = path.basename(file);
+    const [nameSlug, nameLens] = splitLens(path.basename(file, ".json"));
+    if (!("slug" in feature)) feature.slug = nameSlug;
+    const lens = feature.lens || nameLens || "product";
+    checkEnum(problems, name, "lens", lens, LENS);
+    if (nameLens && feature.lens && feature.lens !== nameLens) {
+      problems.warn(`${name}: lens=${repr(feature.lens)} but the filename says ` +
+        `${repr(nameLens)} — the field wins`);
+    }
+    feature.lens = lens;
     lintFeature(feature, file, problems, seenIds, citations);
-    features.push(feature);
+    if (!groups.has(feature.slug)) groups.set(feature.slug, []);
+    groups.get(feature.slug).push({ name, feature });
   }
+
+  const features = mergeLenses(groups, problems);
 
   for (const entry of project.cross_cutting || []) {
     citations.check(problems, "project.json", repr(entry.id), entry.evidence);
@@ -460,6 +609,23 @@ const FIXTURE_FEATURES = [
     gaps: [], opportunities: [], dependencies: [], open_questions: [],
   },
   {
+    schema_version: "1.0", slug: "alpha", name: "Alpha", reviewed_at: "2026-07-30",
+    lens: "security", maturity: "alpha", confidence: "medium",
+    state_summary: "Guards are thin.",
+    surface: { routes: ["GET /alpha", "POST /alpha/admin"] },
+    coverage: {
+      test_files: ["tests/AlphaTest.php"], tested_paths: [],
+      untested_paths: [], not_inspected: ["gateway config"],
+    },
+    user_flows: [],
+    bugs: [{
+      id: "alpha-sec-bug-01", title: "Unscoped find", severity: "high",
+      type: "security", description: "d", repro: "r", impact: "i",
+      evidence: ["a.php:9"], suggested_fix: "f", effort: "S", confidence: "high",
+    }],
+    gaps: [], opportunities: [], dependencies: [], open_questions: ["Who owns authz?"],
+  },
+  {
     schema_version: "1.0", slug: "beta", name: "Beta", reviewed_at: "2026-07-30",
     maturity: "stub", confidence: "low", state_summary: "Shell only.",
     surface: {
@@ -510,7 +676,9 @@ function selftest() {
     fs.mkdirSync(path.join(recon, "features"), { recursive: true });
     fs.writeFileSync(path.join(recon, "project.json"), JSON.stringify(FIXTURE_PROJECT));
     for (const feature of FIXTURE_FEATURES) {
-      fs.writeFileSync(path.join(recon, "features", `${feature.slug}.json`),
+      const lens = feature.lens || "product";
+      const suffix = lens === "product" ? "" : `.${lens}`;
+      fs.writeFileSync(path.join(recon, "features", `${feature.slug}${suffix}.json`),
         JSON.stringify(feature));
     }
 
@@ -519,10 +687,11 @@ function selftest() {
     eq(totals.features, 2, "totals.features");
     eq(totals.by_maturity,
       { missing: 0, stub: 1, alpha: 0, beta: 1, production_ready: 0 }, "by_maturity");
-    eq(totals.bugs_by_severity, { critical: 1, high: 0, medium: 0, low: 1 }, "bugs_by_severity");
+    eq(totals.bugs_by_severity, { critical: 1, high: 1, medium: 0, low: 1 }, "bugs_by_severity");
     assert(totals.gaps === 1 && totals.opportunities === 0, `gaps/opps: ${JSON.stringify(totals)}`);
     eq(totals.features_without_tests, ["beta"], "features_without_tests");
     eq(project.features[0].counts.critical_bugs, 1, "alpha critical_bugs");
+    eq(project.features[0].counts.bugs, 2, "alpha bugs");
 
     // counts survive the round-trip into project.json
     eq(JSON.parse(fs.readFileSync(path.join(recon, "project.json"), "utf8")).totals,
@@ -534,6 +703,17 @@ function selftest() {
     eq(payload.project.project_name, "Fixture", "payload project_name");
     eq(payload.features.map((f) => f.slug), ["alpha", "beta"], "payload feature order");
     assert(html.includes("Fixture"), "rendered HTML does not mention the project name");
+
+    // the two alpha lens files merged into one feature, product lens first and in charge
+    const alpha = payload.features[0];
+    eq(alpha.lenses, ["product", "security"], "alpha lenses");
+    assert(alpha.maturity === "beta" && alpha.state_summary === "Works.",
+      `alpha kept the specialist's rating: ${JSON.stringify(alpha.maturity)}`);
+    eq(alpha.bugs.map((b) => b.lens), ["product", "security"], "alpha bug lens stamps");
+    eq(alpha.surface.routes, ["GET /alpha", "POST /alpha/admin"], "alpha surface union");
+    eq(alpha.coverage.test_files, ["tests/AlphaTest.php"], "alpha test_files dedup");
+    eq(alpha.coverage.not_inspected, ["gateway config"], "alpha not_inspected union");
+    eq(alpha.open_questions, ["Who owns authz?"], "alpha open_questions union");
 
     check(recon);
   } finally {

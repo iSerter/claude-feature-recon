@@ -6,8 +6,9 @@
     python3 build_report.py --selftest
 
 Reads <recon-dir>/project.json and <recon-dir>/features/*.json, lints them against the
-report spec, derives every count (so the model never has to do arithmetic), writes the
-counts back into project.json, and injects the merged payload into template.html.
+report spec, merges the per-lens files of each feature into one, derives every count (so the
+model never has to do arithmetic), writes the counts back into project.json, and injects the
+merged payload into template.html.
 
 Stdlib only. No install step. build_report.js is a port of this script with the same CLI
 and byte-identical output; build_report.sh picks whichever runtime the machine has.
@@ -27,9 +28,13 @@ PRIORITY = ["P0", "P1", "P2", "P3"]
 VALUE = ["high", "medium", "low"]
 FLOW_STATUS = ["working", "partial", "broken", "not_implemented"]
 BUG_TYPE = ["runtime_error", "logic", "data_integrity", "security",
-            "performance", "ux", "regression"]
+            "performance", "ux", "a11y", "regression"]
 GAP_KIND = ["missing_feature", "missing_validation", "missing_tests",
             "missing_error_handling", "missing_ui", "unwired"]
+# Review lenses, in report order. The product lens is the default and owns each feature's overall
+# rating; the rest are opt-in and write their own file per feature.
+LENS = ["product", "security", "ux"]
+FINDING_KINDS = ["bugs", "gaps", "opportunities"]
 
 FEATURE_KEYS = ["slug", "name", "maturity", "confidence", "state_summary", "surface",
                 "coverage", "user_flows", "bugs", "gaps", "opportunities",
@@ -156,20 +161,127 @@ def lint_feature(feature, path, problems, seen_ids, citations):
         check_enum(problems, where, "opportunities[].effort", opp.get("effort"), EFFORT)
         check_enum(problems, where, "opportunities[].priority", opp.get("priority"), PRIORITY)
 
-    for kind in ("bugs", "gaps", "opportunities"):
+    for kind in FINDING_KINDS:
         for finding in feature.get(kind, []):
             fid = finding.get("id")
             if not fid:
                 problems.warn(f"{where}: a {kind[:-1]} has no id ({finding.get('title')!r})")
             elif fid in seen_ids:
-                problems.warn(f"{where}: duplicate finding id {fid!r} (also in {seen_ids[fid]})")
+                prev_where, prev_slug = seen_ids[fid]
+                msg = f"{where}: duplicate finding id {fid!r} (also in {prev_where})"
+                # Across lens files of one feature the id is the only handle on a finding — for
+                # top_findings, cross_cutting and feature-tasks — so a collision there is fatal.
+                if prev_where != where and prev_slug == feature.get("slug"):
+                    problems.error(f"{msg} — two lenses of the same feature cannot share an id")
+                else:
+                    problems.warn(msg)
             else:
-                seen_ids[fid] = where
+                seen_ids[fid] = (where, feature.get("slug"))
             label = repr(fid or finding.get("title"))
             if not finding.get("evidence"):
                 problems.warn(f"{where}: {label} has no evidence")
             else:
                 citations.check(problems, where, label, finding.get("evidence"))
+
+
+def split_lens(stem):
+    """Read the lens off a feature filename: `billing.security` -> ('billing', 'security').
+
+    Returns (slug, None) when the stem carries no lens suffix, so `billing.json` keeps working.
+    """
+    head, dot, tail = stem.rpartition(".")
+    if dot and tail in LENS:
+        return head, tail
+    return stem, None
+
+
+def as_list(value):
+    return value if isinstance(value, list) else []
+
+
+def union_lists(first, second):
+    """Concatenate, dropping strings the first list already has.
+
+    Only strings are compared: nothing else in these lists (findings, flows) can be judged the same
+    across two files without guessing, so duplicates of those are kept and the reader decides.
+    """
+    out = list(first)
+    seen = {x for x in out if isinstance(x, str)}
+    for item in second:
+        if isinstance(item, str):
+            if item in seen:
+                continue
+            seen.add(item)
+        out.append(item)
+    return out
+
+
+def merge_lists_into(target, other):
+    """Union every list value of `other` into `target` (used for `surface` and `coverage`)."""
+    for key, value in other.items():
+        if not isinstance(value, list):
+            continue
+        if isinstance(target.get(key), list):
+            target[key] = union_lists(target[key], value)
+        elif key not in target:
+            target[key] = list(value)
+
+
+def lens_rank(lens):
+    """Report order for lenses; anything unrecognised sorts last."""
+    return LENS.index(lens) if lens in LENS else len(LENS)
+
+
+def confidence_rank(confidence):
+    return CONFIDENCE.index(confidence) if confidence in CONFIDENCE else len(CONFIDENCE)
+
+
+def merge_lenses(groups, problems):
+    """Collapse each slug's per-lens files into one feature object.
+
+    Findings are concatenated with the product lens first and each one stamped with its source lens;
+    `surface` and `coverage` lists are unioned; `maturity`, `state_summary`, `confidence` and
+    `dependencies` come from the product lens, because a specialist rates its own slice and not the
+    feature's overall readiness.
+    """
+    merged = []
+
+    for slug, members in groups.items():
+        members.sort(key=lambda m: (lens_rank(m[1].get("lens")), m[0].name))
+        for _, member in members:
+            for kind in FINDING_KINDS:
+                for finding in as_list(member.get(kind)):
+                    if isinstance(finding, dict):
+                        finding["lens"] = member.get("lens")
+
+        base = next((f for _, f in members if f.get("lens") == "product"), None)
+        if base is None:
+            # Nobody read this feature end to end, so no file in the group can speak for its
+            # maturity. Take the most confident one and say what happened.
+            base_path, base = min(members,
+                                  key=lambda m: confidence_rank(m[1].get("confidence")))
+            problems.warn(f"features/{slug}: no product-lens file — maturity, summary and "
+                          f"dependencies taken from {base_path.name}")
+
+        for _, member in members:
+            if member is base:
+                continue
+            for key in ("user_flows", "bugs", "gaps", "opportunities"):
+                base[key] = as_list(base.get(key)) + as_list(member.get(key))
+            base["open_questions"] = union_lists(as_list(base.get("open_questions")),
+                                                 as_list(member.get("open_questions")))
+            for key in ("surface", "coverage"):
+                other = member.get(key)
+                if not isinstance(other, dict):
+                    continue
+                if not isinstance(base.get(key), dict):
+                    base[key] = {}
+                merge_lists_into(base[key], other)
+
+        base["lenses"] = union_lists([], [f.get("lens") for _, f in members])
+        merged.append(base)
+
+    return merged
 
 
 def derive(project, features, problems):
@@ -182,7 +294,7 @@ def derive(project, features, problems):
             problems.error(f"project.json indexes {entry.get('slug')!r} but no feature file exists")
     for slug in by_slug:
         if not any(e.get("slug") == slug for e in index):
-            problems.warn(f"features/{slug}.json exists but project.json does not index it")
+            problems.warn(f"feature {slug!r} has a state file but project.json does not index it")
 
     totals = {
         "features": len(features),
@@ -232,7 +344,7 @@ def derive(project, features, problems):
             entry.setdefault("maturity", feature.get("maturity"))
             entry.setdefault("confidence", feature.get("confidence"))
 
-    refs = {fid for f in features for kind in ("bugs", "gaps", "opportunities")
+    refs = {fid for f in features for kind in FINDING_KINDS
             for fid in (x.get("id") for x in f.get(kind, []))}
     for top in project.get("top_findings", []):
         if top.get("ref") and top["ref"] not in refs:
@@ -274,15 +386,24 @@ def build(recon_dir, out_path=None, template_path=None):
         raise SystemExit(f"no feature files in {recon_dir / 'features'}")
 
     citations = Citations(recon_dir)
-    features = []
+    groups = {}
     seen_ids = {}
     for path in feature_paths:
         feature = load_json(path, problems)
         if feature is None:
             continue
-        feature.setdefault("slug", path.stem)
+        name_slug, name_lens = split_lens(path.stem)
+        feature.setdefault("slug", name_slug)
+        lens = feature.get("lens") or name_lens or "product"
+        check_enum(problems, path.name, "lens", lens, LENS)
+        if name_lens and feature.get("lens") and feature["lens"] != name_lens:
+            problems.warn(f"{path.name}: lens={feature['lens']!r} but the filename says "
+                          f"{name_lens!r} — the field wins")
+        feature["lens"] = lens
         lint_feature(feature, path, problems, seen_ids, citations)
-        features.append(feature)
+        groups.setdefault(feature["slug"], []).append((path, feature))
+
+    features = merge_lenses(groups, problems)
 
     for entry in project.get("cross_cutting") or []:
         citations.check(problems, "project.json", repr(entry.get("id")), entry.get("evidence"))
@@ -343,6 +464,20 @@ FIXTURE_FEATURES = [
         "gaps": [], "opportunities": [], "dependencies": [], "open_questions": [],
     },
     {
+        "schema_version": "1.0", "slug": "alpha", "name": "Alpha", "reviewed_at": "2026-07-30",
+        "lens": "security", "maturity": "alpha", "confidence": "medium",
+        "state_summary": "Guards are thin.",
+        "surface": {"routes": ["GET /alpha", "POST /alpha/admin"]},
+        "coverage": {"test_files": ["tests/AlphaTest.php"], "tested_paths": [],
+                     "untested_paths": [], "not_inspected": ["gateway config"]},
+        "user_flows": [],
+        "bugs": [{"id": "alpha-sec-bug-01", "title": "Unscoped find", "severity": "high",
+                  "type": "security", "description": "d", "repro": "r", "impact": "i",
+                  "evidence": ["a.php:9"], "suggested_fix": "f", "effort": "S",
+                  "confidence": "high"}],
+        "gaps": [], "opportunities": [], "dependencies": [], "open_questions": ["Who owns authz?"],
+    },
+    {
         "schema_version": "1.0", "slug": "beta", "name": "Beta", "reviewed_at": "2026-07-30",
         "maturity": "stub", "confidence": "low", "state_summary": "Shell only.",
         "surface": {"routes": [], "controllers": [], "packages": [], "models": [],
@@ -378,18 +513,22 @@ def selftest():
         (recon / "features").mkdir(parents=True)
         (recon / "project.json").write_text(json.dumps(FIXTURE_PROJECT))
         for feature in FIXTURE_FEATURES:
-            (recon / "features" / f"{feature['slug']}.json").write_text(json.dumps(feature))
+            lens = feature.get("lens", "product")
+            suffix = "" if lens == "product" else f".{lens}"
+            (recon / "features" / f"{feature['slug']}{suffix}.json").write_text(
+                json.dumps(feature))
 
         out, project = build(recon)
         totals = project["totals"]
         assert totals["features"] == 2, totals
         assert totals["by_maturity"] == {"missing": 0, "stub": 1, "alpha": 0, "beta": 1,
                                          "production_ready": 0}, totals
-        assert totals["bugs_by_severity"] == {"critical": 1, "high": 0, "medium": 0,
+        assert totals["bugs_by_severity"] == {"critical": 1, "high": 1, "medium": 0,
                                               "low": 1}, totals
         assert totals["gaps"] == 1 and totals["opportunities"] == 0, totals
         assert totals["features_without_tests"] == ["beta"], totals
         assert project["features"][0]["counts"]["critical_bugs"] == 1
+        assert project["features"][0]["counts"]["bugs"] == 2, project["features"][0]["counts"]
 
         # counts survive the round-trip into project.json
         assert json.loads((recon / "project.json").read_text())["totals"] == totals
@@ -400,6 +539,16 @@ def selftest():
         assert payload["project"]["project_name"] == "Fixture"
         assert [f["slug"] for f in payload["features"]] == ["alpha", "beta"]
         assert "Fixture" in html
+
+        # the two alpha lens files merged into one feature, product lens first and in charge
+        alpha = payload["features"][0]
+        assert alpha["lenses"] == ["product", "security"], alpha["lenses"]
+        assert alpha["maturity"] == "beta" and alpha["state_summary"] == "Works.", alpha
+        assert [b["lens"] for b in alpha["bugs"]] == ["product", "security"], alpha["bugs"]
+        assert alpha["surface"]["routes"] == ["GET /alpha", "POST /alpha/admin"], alpha["surface"]
+        assert alpha["coverage"]["test_files"] == ["tests/AlphaTest.php"], alpha["coverage"]
+        assert alpha["coverage"]["not_inspected"] == ["gateway config"], alpha["coverage"]
+        assert alpha["open_questions"] == ["Who owns authz?"], alpha["open_questions"]
 
         check(recon)
     print("selftest OK")

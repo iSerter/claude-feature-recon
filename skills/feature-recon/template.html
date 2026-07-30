@@ -377,6 +377,9 @@ a.chip:hover { border-color: var(--accent); color: var(--ink); }
   border: 1px solid var(--border); color: var(--muted); background: var(--surface-2);
   font-weight: 650; letter-spacing: 0.02em; text-transform: uppercase;
 }
+/* Which lens filed a finding: attribution, not a category — dashed so it reads as a source note
+   and does not compete with the kind and severity chips beside it. */
+.pill.lens { border-style: dashed; background: transparent; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 
 /* ---------- feature health grid ---------- */
@@ -633,7 +636,25 @@ footer {
   var EFFORT = ["S", "M", "L"];
   var EFFORT_LABEL = { S: "S · <1d", M: "M · 1-3d", L: "L · >3d" };
   var PRIORITY = ["P0", "P1", "P2", "P3"];
+  var LENS_LABEL = { product: "Product", security: "Security", ux: "UI/UX" };
   var T = P.totals || {};
+
+  /* Which review lenses actually contributed, in report order. A single-lens report shows no lens
+     UI at all — a chip reading "Product" on every finding is noise when there is nothing to
+     contrast it with. */
+  var LENSES = (function () {
+    var order = ["product", "security", "ux"], seen = {}, out = [];
+    FEATURES.forEach(function (f) {
+      list(f.lenses).concat(f.lens ? [f.lens] : []).forEach(function (l) {
+        if (l && !seen[l]) { seen[l] = 1; out.push(l); }
+      });
+    });
+    return out.sort(function (a, b) {
+      var x = order.indexOf(a), y = order.indexOf(b);
+      return (x < 0 ? order.length : x) - (y < 0 ? order.length : y);
+    });
+  })();
+  var MULTI_LENS = LENSES.length > 1;
 
   /* ---------- helpers ---------- */
   function esc(s) {
@@ -1093,6 +1114,10 @@ footer {
         opts(EFFORT, EFFORT_LABEL) + "</select></label>" +
       '<label class="f">Priority <select id="f-pri"><option value="all">any</option>' +
         opts(PRIORITY) + "</select></label>" +
+      (MULTI_LENS
+        ? '<label class="f">Lens <select id="f-lens"><option value="all">any</option>' +
+          opts(LENSES, LENS_LABEL) + "</select></label>"
+        : "") +
       '<input type="search" id="f-q" placeholder="Search titles, files, text…  (/)" ' +
         'aria-label="Search findings">' +
       '<button class="btn" id="expand">Expand all</button>' +
@@ -1119,6 +1144,11 @@ footer {
     }
     if (f.priority) chips.push('<span class="pill">' + esc(f.priority) + "</span>");
     if (f.effort) chips.push('<span class="pill">' + esc(f.effort) + "</span>");
+    var lens = f.lens || "product";
+    if (MULTI_LENS) {
+      chips.push('<span class="pill lens"' + tip("Found by the " + (LENS_LABEL[lens] || lens) +
+        " lens") + ">" + esc(LENS_LABEL[lens] || lens) + "</span>");
+    }
 
     var rows = [
       ["", f.description], ["Repro", f.repro], ["Impact", f.impact],
@@ -1130,6 +1160,7 @@ footer {
     return '<div class="find k-' + kind + (sev ? " s-" + sev : "") + '"' +
         ' data-kind="' + kind + '" data-sev="' + esc(sev) + '"' +
         ' data-effort="' + esc(f.effort || "") + '" data-priority="' + esc(f.priority || "") + '"' +
+        ' data-lens="' + esc(lens) + '"' +
         ' data-feature="' + esc(feature.slug) + '" data-text="' + esc(text) + '">' +
       '<div class="fhead">' + chips.join("") +
         '<span class="ftitle">' + esc(f.title) + "</span>" +
@@ -1191,7 +1222,12 @@ footer {
           esc(f.state_summary || "") + "</p>" +
           '<div class="small faint">Confidence: ' + esc(f.confidence || "?") +
           (list(f.dependencies).length
-            ? " · Depends on: " + esc(list(f.dependencies).join(", ")) : "") + "</div></div>" +
+            ? " · Depends on: " + esc(list(f.dependencies).join(", ")) : "") +
+          (MULTI_LENS && list(f.lenses).length
+            ? " · Reviewed by: " + esc(list(f.lenses).map(function (l) {
+              return LENS_LABEL[l] || l;
+            }).join(", ")) + " lens" + (list(f.lenses).length === 1 ? "" : "es") : "") +
+          "</div></div>" +
         (flows ? '<div class="sub"><h4>User flows</h4><ul class="flows">' + flows + "</ul></div>" : "") +
         (surfaceRows ? '<div class="sub"><h4>Surface</h4><dl class="kv">' + surfaceRows +
           "</dl></div>" : "") +
@@ -1221,11 +1257,12 @@ footer {
 
   /* ---------- interaction ---------- */
   var state = { kinds: { bug: true, gap: true, opp: true }, sev: "all", mat: "all",
-                eff: "all", pri: "all", q: "" };
+                eff: "all", pri: "all", lens: "all", q: "" };
 
   function applyFilters() {
     var active = !state.kinds.bug || !state.kinds.gap || !state.kinds.opp ||
-      state.sev !== "all" || state.eff !== "all" || state.pri !== "all" || state.q !== "";
+      state.sev !== "all" || state.eff !== "all" || state.pri !== "all" ||
+      state.lens !== "all" || state.q !== "";
     var shown = 0, total = 0;
 
     Array.prototype.forEach.call(app.querySelectorAll("details.feat"), function (card) {
@@ -1238,6 +1275,7 @@ footer {
           (state.sev === "all" || (d.kind === "bug" && d.sev === state.sev)) &&
           (state.eff === "all" || d.effort === state.eff) &&
           (state.pri === "all" || d.priority === state.pri) &&
+          (state.lens === "all" || d.lens === state.lens) &&
           (!state.q || d.text.indexOf(state.q) >= 0);
         f.classList.toggle("hidden", !ok);
         if (ok) { n++; shown++; }
@@ -1328,8 +1366,11 @@ footer {
       applyFilters();
     });
 
-    [["f-sev", "sev"], ["f-mat", "mat"], ["f-eff", "eff"], ["f-pri", "pri"]].forEach(function (p) {
-      document.getElementById(p[0]).addEventListener("change", function () {
+    [["f-sev", "sev"], ["f-mat", "mat"], ["f-eff", "eff"], ["f-pri", "pri"],
+     ["f-lens", "lens"]].forEach(function (p) {
+      var el = document.getElementById(p[0]);   /* f-lens only exists in a multi-lens report */
+      if (!el) return;
+      el.addEventListener("change", function () {
         state[p[1]] = this.value;
         applyFilters();
       });

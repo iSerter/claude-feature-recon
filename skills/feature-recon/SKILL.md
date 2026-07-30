@@ -10,7 +10,9 @@ A reconnaissance sweep, not an authoritative audit: it reports what it actually 
 feature, a rollup, and a self-contained HTML dashboard built from them.
 
 Bundled files live beside this SKILL.md (`${CLAUDE_PLUGIN_ROOT}/skills/feature-recon/`):
-`reference/report-spec.md`, `build_report.sh`, `template.html`. Always pass absolute paths.
+`reference/report-spec.md`, `reference/lens-security.md`, `reference/lens-ux.md`,
+`build_report.sh`, `template.html`. The review agents live at `${CLAUDE_PLUGIN_ROOT}/agents/`.
+Always pass absolute paths.
 
 `build_report.sh` is the only entry point you call: it runs whichever of python3 / node the
 machine has. Never call `build_report.py` or `build_report.js` directly, and never assume a
@@ -24,6 +26,9 @@ JSON state files are already complete and useful on their own.
 - `<recon-dir>` — default `docs/recon`, or `--dir <path>`.
 - Explicit feature list, if the user gave one → skip step 3.
 - `--sequential` → skip the fan-out in step 4 and sweep features one at a time in this context.
+- `--lens <list>` — which review lenses to run: `product` (the default, and what a plain run does),
+  `security`, `ux`, or `all`. Comma-separated. **Never add a lens the user did not ask for**: each one
+  multiplies the agent count by the feature count, and the specialists exist to be opted into.
 
 ### 2. Orient once
 
@@ -65,31 +70,46 @@ Slugs are kebab-case and stable — they are the JSON filenames and the dashboar
 
 ### 4. Sweep
 
-Default: fan out **one subagent per feature, in batches of 3–4** (a batch = one message with
-multiple Agent calls). Sequential mode: do the same work yourself, one feature at a time, holding
-yourself to every instruction below as if you had been handed it.
+One subagent per (feature, lens). The stance, the method, the read-only rule and the output contract
+live in the agent definitions, so the prompt you write is short:
+
+| Lens | Agent | Writes | Extra spec to pass |
+|---|---|---|---|
+| `product` (default) | `recon-product-engineer` | `features/{slug}.json` | — |
+| `security` | `recon-security` | `features/{slug}.security.json` | `reference/lens-security.md` |
+| `ux` | `recon-ux` | `features/{slug}.ux.json` | `reference/lens-ux.md` |
+
+**Count the agents before you spawn any: lenses × features.** If that is more than about 20, tell the
+user the number and the breakdown and **ask them to confirm before spawning**. Forty-eight subagents
+is a real bill and must never be a surprise.
+
+Fan out in **batches of 3–4 agents** (a batch = one message with multiple Agent calls), spawning each
+one by the agent name in the table — never a generic agent with the persona pasted into the prompt,
+which is what these files exist to replace. Run **every feature's product lens first**, then the
+specialist lenses: a specialist reads the product lens's file for its feature and skips what it
+already filed, which is the cheapest dedup available.
 
 Each agent prompt contains, in this order:
 
 1. The orientation brief from step 2.
-2. `You are a senior product engineer doing a pre-handover readiness review of exactly one feature:
-   {name} (slug: {slug}) — the feature you are about to own. Find what is broken, missing, or will
-   page someone at 3am. An inventory of what exists is a failed review.`
-3. `Read <abs>/reference/report-spec.md. Sections 0-2 are your method, not just the schema: trace the
-   feature's primary user flow end to end through every layer before you catalogue anything, then run
-   the defect patterns in section 2b against what you traced. Expect to open 15-40 files.`
-4. `You may read, grep and use read-only git freely. Do not edit a single source file — this is
-   reconnaissance. Create <abs recon-dir>/features/ if it does not exist.`
-5. `Write your result to <abs recon-dir>/features/{slug}.json. Return only a short summary: maturity ·
-   bug counts by severity and gap count · the single biggest finding · what you could not inspect ·
-   anything you suspect is shared with other features rather than local to this one.`
-6. `If the feature does not actually exist in this codebase, still write the file: maturity "missing",
-   confidence per what you searched, and the paths and greps you tried in coverage.not_inspected.`
-7. Any feature-specific pointers you already know (its route prefix, its package dir).
+2. `Review exactly one feature: {name} (slug: {slug}).`
+3. The absolute paths: `<abs>/reference/report-spec.md`, the lens spec from the table above for a
+   specialist, and the absolute `<recon-dir>` to write into. Say explicitly that `features/` may need
+   creating.
+4. Any feature-specific pointers you already know — its route prefix, its package dir, its pages.
+5. For a specialist only: `The product lens's file for this feature is at <abs
+   recon-dir>/features/{slug}.json — read it first and do not refile what it already found.`
 
 The JSON file is the deliverable — never ask an agent to return the report body in its response. The
 counts in the summary are how you spot an agent that came back suspiciously empty: for a feature of
-any size, zero bugs and zero gaps usually means a shallow read, not clean code. Re-run those.
+any size, zero bugs and zero gaps from the product lens usually means a shallow read, not clean code.
+Re-run those. A **specialist** coming back with nothing is a legitimate result — but it is also the
+signal to report at the end, because a lens that costs N agents and finds nothing is not worth
+running again.
+
+**Sequential mode** (`--sequential`): do the same work yourself, one feature at a time and one lens at
+a time. Read `${CLAUDE_PLUGIN_ROOT}/agents/recon-product-engineer.md` — plus the specialist's file for
+each selected lens — and hold yourself to it exactly as if you had been handed it as a prompt.
 
 ### 5. Verify
 
@@ -100,14 +120,24 @@ sh <abs>/build_report.sh --check <recon-dir>
 It prints `BAD: <path>: <what went wrong>` for every file that does not parse, or `OK N JSON
 files parse`. Run it again after step 6 to catch a hand-written `project.json`.
 
-Re-run a failed or missing feature once. If it fails twice, write a minimal file for it with
-`confidence: "low"` and the failure recorded in `coverage.not_inspected`.
+Re-run a failed or missing (feature, lens) once — only that one file is affected, since each lens
+writes its own. If it fails twice, write a minimal file for it with `confidence: "low"` and the
+failure recorded in `coverage.not_inspected`.
 
 ### 6. Rollup
 
 Write `<recon-dir>/project.json` per the spec's section 4 — prose plus the `features[]` index.
 Build it from the feature files **on disk**, not from memory. Do not write `counts` or `totals`;
-the build script derives them.
+the build script derives them. `features[]` has **one entry per feature, never one per lens file** —
+the build script merges the lens files behind that entry.
+
+**If more than one lens ran, dedup before anything else.** Two lenses that filed the same defect at
+the same `path:line` by the same mechanism is one finding: delete the weaker write-up from its file
+and keep the more specific one — usually the specialist's, since the generalist reached it as one item
+out of ten. Doing this first means the counts the build script derives are already honest. Note the
+overlap you had to remove in your final report: a specialist that mostly duplicates the product lens
+is not earning its agents. Findings that recur across *features* are a different thing and still get
+promoted to `cross_cutting`.
 
 `summary`, `cross_cutting`, `top_findings` and `recommended_sequence` are the parts only you can
 write: read back the feature files, look for the same root cause repeating across features, and rank
@@ -138,6 +168,10 @@ that re-running just this step finishes the job.
 Give the user the output paths and a 3–5 line verdict. Do not open the HTML for them, and do not
 start fixing what you found unless they ask. Mention that `/feature-tasks` turns these findings into
 ordered task files if they want to act on them.
+
+If a specialist lens ran, say what it cost and what it bought: how many agents, how many findings the
+product lens had not already filed, and how much overlap you deduped. That is the only way the user
+can decide whether to pay for that lens again.
 
 ## Rules
 

@@ -23,6 +23,12 @@ Bundled templates live beside this SKILL.md (`${CLAUDE_PLUGIN_ROOT}/skills/featu
 Default `docs/recon`; accept `--dir <path>`. Read `project.json` and every file in `features/`.
 If there is no report, stop and tell the user to run `/feature-recon` first — do not invent findings.
 
+A feature may have more than one state file, one per review lens: `{slug}.json` is the product lens,
+`{slug}.security.json` and `{slug}.ux.json` are the specialists. **Read them all** — they are one
+feature's findings split across files, and the finding id tells you which file a given finding lives
+in: `{slug}-sec-*` in the security file, `{slug}-ux-*` in the UX file, everything else in
+`{slug}.json`. You need that mapping in step 6.
+
 Output goes to `tasks/` by default, `--out <dir>` to change it. Check what is already in that
 directory first: if tasks from a previous run exist, update them rather than writing duplicates.
 
@@ -31,7 +37,12 @@ directory first: if tasks from a previous run exist, update them rather than wri
 With no arguments, take everything that is `critical` or `high` severity, plus every `P0`/`P1` gap,
 plus anything named in `top_findings` or `recommended_sequence`. Honour explicit selectors when
 given: `--ids a-bug-01,b-gap-02` · `--feature billing` · `--severity critical` · `--priority P0` ·
-`--all`.
+`--lens security` · `--all`.
+
+`--lens <list>` narrows to findings from those lenses — `product`, `security`, `ux`, or `all`
+(the default: every lens in the report). Combines with the other selectors. Note that a task usually
+ends up spanning lenses anyway: a security finding and a product finding at the same choke point are
+one fix, and step 4 says merge them.
 
 If the selection exceeds ~10 tasks, write the top 10 and list the remainder in the index under
 "Not yet written" — a 40-task dump gets read by nobody.
@@ -95,7 +106,10 @@ silently — if you disagree with the report's effort, say so in the task and gi
 ### 6. Close the loop
 
 Every task ends with a **Report updates** section telling whoever lands the fix to delete the
-resolved finding from `<recon-dir>/features/{slug}.json`, then re-run:
+resolved finding from the file it actually lives in — `<recon-dir>/features/{slug}.json`,
+`{slug}.security.json` or `{slug}.ux.json`, per the id's lens segment. **Name the exact file in the
+task**; a task that says "delete it from the feature file" sends someone to the wrong one. Then
+re-run:
 
 ```sh
 sh <plugin>/skills/feature-recon/build_report.sh <recon-dir>

@@ -54,7 +54,8 @@ pre-existing failures in this area that will need reading first.}
 
 1. `{recon-dir}/features/{slug}.json` — delete `{feature-bug-01}` from `{bugs|gaps|opportunities}[]`;
    update `coverage.test_files` with the tests you added, revisit `maturity` if this changes it, and
-   refresh `reviewed_at`.
+   refresh `reviewed_at`. {Name one line per file when the task closes findings from more than one
+   lens: `-sec-` ids live in `{slug}.security.json`, `-ux-` ids in `{slug}.ux.json`.}
 2. `{recon-dir}/project.json` — refresh `git_commit` and `reviewed_at`. Then, only where they
    actually apply: remove `{feature-bug-01}` from `top_findings[]`; drop it from the
    `recommended_sequence[]` step that names it; remove `{slug}` from `cross_cutting[].affects` if the

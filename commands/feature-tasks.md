@@ -1,6 +1,6 @@
 ---
 description: Turn feature-recon findings into ordered, ready-to-execute task files with tests and report-update steps
-argument-hint: "[--severity critical] [--priority P0] [--feature x] [--ids a-bug-01,...] [--all] [--dir docs/recon] [--out tasks]"
+argument-hint: "[--severity critical] [--priority P0] [--feature x] [--lens security] [--ids a-bug-01,...] [--all] [--dir docs/recon] [--out tasks]"
 disable-model-invocation: false
 ---
 
@@ -8,8 +8,9 @@ Create task files from this repository's feature-recon report using the `feature
 
 Arguments (all optional): $ARGUMENTS
 
-- `--severity` / `--priority` / `--feature` / `--ids` / `--all` → which findings to write tasks for.
-  With none of these, defaults to critical + high bugs, P0/P1 gaps, and anything in `top_findings`.
+- `--severity` / `--priority` / `--feature` / `--lens` / `--ids` / `--all` → which findings to write
+  tasks for. With none of these, defaults to critical + high bugs, P0/P1 gaps, and anything in
+  `top_findings`, across every lens in the report.
 - `--dir <path>` → where the report lives (default `docs/recon`).
 - `--out <path>` → where to write the tasks (default `tasks`).
 

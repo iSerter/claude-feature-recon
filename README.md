@@ -30,11 +30,14 @@ Two commands: one surveys, one turns the survey into work.
 /feature-recon                          # discover features, confirm the list, sweep everything
 /feature-recon brands,campaigns,billing # sweep exactly these
 /feature-recon --dir docs/state         # write somewhere other than docs/recon
+/feature-recon --lens security          # add the security review lens
+/feature-recon --lens all               # product + security + UI/UX (3 subagents per feature)
 /feature-recon --sequential             # no subagent fan-out, one feature at a time
 
 /feature-tasks                          # task files for critical+high bugs and P0/P1 gaps
 /feature-tasks --severity critical      # only the critical ones
 /feature-tasks --feature billing        # only one feature
+/feature-tasks --lens security          # only what the security lens found
 /feature-tasks --ids billing-bug-01,xc-02
 /feature-tasks --out tasks/q3           # write somewhere other than tasks/
 ```
@@ -46,13 +49,34 @@ untested", "turn the recon findings into tasks", "what should we fix first".
 
 ```
 docs/recon/
-  project.json              rollup: verdict, cross-cutting findings, top findings, sequence, totals
-  features/{slug}.json      one per feature: maturity, surface, coverage, flows, bugs, gaps, opps
-  recon-report.html         the dashboard — one file, opens by double-click, works offline
+  project.json                    rollup: verdict, cross-cutting findings, top findings, totals
+  features/{slug}.json            one per feature: maturity, surface, coverage, flows, bugs, gaps, opps
+  features/{slug}.security.json   only with --lens security
+  features/{slug}.ux.json         only with --lens ux
+  recon-report.html               the dashboard — one file, opens by double-click, works offline
 ```
 
 Each finding carries a stable id (`billing-bug-01`), an effort estimate, and the evidence it came
 from, so consecutive runs diff cleanly in git and findings can be referenced in tickets.
+
+## Review lenses
+
+Every lens reviews one feature and writes its own file; the builder merges them into one feature in
+the report, keeping the product lens's maturity rating and stamping each finding with the lens that
+filed it. Re-running one lens leaves the others alone.
+
+| Lens | Flag | Looks for | Cap per feature |
+|---|---|---|---|
+| Product engineer | default | Does this work for a real user, and what will page someone at 3am | 10 bugs, 8 gaps, 6 opps |
+| Security | `--lens security` | The guard rather than the flow: authz depth, tenancy, injection at a named sink, SSRF, secrets, what leaks | 6 bugs, 5 gaps, 3 opps |
+| UI/UX | `--lens ux` | The states nobody wrote: empty, loading, error, partial; destructive actions, keyboard and label defects (`a11y`) | 6 bugs, 5 gaps, 3 opps |
+
+**The product lens is the default and the specialists are opt-in, because the cost is multiplicative:**
+three lenses across sixteen features is 48 subagents. Above ~20 agents the sweep states the number and
+asks before spawning. Each specialist's file says what is *not* a finding for it — CVE-scanner noise
+and unreachable theory for security, visual preference and copy rewriting for UI/UX — and each is told
+that the product lens owns any defect it already filed at the same `path:line`, so the second pass goes
+deeper instead of refiling.
 
 Then `/feature-tasks` turns those findings into work:
 
@@ -70,13 +94,14 @@ choke-point fix plan, named test cases, and the steps to update the report when 
 1. **Orient** — one pass over the repo for stack, entrypoints, module layout, test locations.
 2. **Discover** — derive the feature list from the product's own navigation, or from module/package
    dirs, or route groups. You confirm the list before anything expensive happens.
-3. **Sweep** — one subagent per feature, in batches, each writing its own JSON state file against
-   `reference/report-spec.md`. Each one works like a product engineer taking the feature over: trace
-   the primary user flow through every layer until it breaks, then run a defect-pattern pass over what
-   it traced — sibling divergence, failure paths, validation, tenancy, atomicity, data integrity,
-   contract drift, the empty-account walkthrough. An inventory of what exists is not the deliverable.
+3. **Sweep** — one subagent per feature per lens, in batches, each writing its own JSON state file
+   against `reference/report-spec.md`. The default lens works like a product engineer taking the
+   feature over: trace the primary user flow through every layer until it breaks, then run a
+   defect-pattern pass over what it traced — sibling divergence, failure paths, validation, tenancy,
+   atomicity, data integrity, contract drift, the empty-account walkthrough. An inventory of what
+   exists is not the deliverable.
 4. **Roll up** — the verdict, the cross-cutting root causes, the ranked findings and a recommended
-   fix sequence.
+   fix sequence. Findings two lenses filed at the same line collapse to one here.
 5. **Build** — `build_report.sh` validates every file, derives all counts (no hand arithmetic), and
    injects the data into the dashboard template.
 
@@ -98,6 +123,7 @@ hand-rolled SVG and CSS, so it opens by double-click and keeps working offline f
 | Where to start | Biggest findings and the recommended fix sequence |
 | Features | A card per feature — maturity, severity bar, counts — clicking one opens its full read |
 | Every finding | Sticky filters (kind, severity, maturity, effort, priority, full-text) over per-feature drill-downs with every cited `path:line` |
+| Lens attribution | With more than one lens, each finding carries the lens that filed it and the filter bar gains a lens selector. A single-lens report shows none of this |
 
 Light and dark themes with a toggle that persists, deep links (`#feature-slug`), a sortable data
 table, keyboard `/` to search, `Copy JSON`, and print styles.
@@ -134,6 +160,10 @@ out of the repo and the check goes quiet, since nothing is left to resolve again
 |---|---|
 | `skills/feature-recon/SKILL.md` | the sweep procedure Claude follows |
 | `skills/feature-recon/reference/report-spec.md` | the JSON contract, handed to each subagent |
+| `skills/feature-recon/reference/lens-security.md` | the security lens's method and scope |
+| `skills/feature-recon/reference/lens-ux.md` | the UI/UX lens's method and scope |
+| `agents/recon-product-engineer.md` | the default review agent — stance, method, output contract |
+| `agents/recon-security.md`, `agents/recon-ux.md` | the two opt-in specialist review agents |
 | `skills/feature-recon/build_report.sh` | runtime picker — the only entry point anything calls |
 | `skills/feature-recon/build_report.py` | validate + derive counts + render, Python (stdlib only) |
 | `skills/feature-recon/build_report.js` | the same, JavaScript (Node builtins only) |
@@ -149,7 +179,8 @@ out of the repo and the check goes quiet, since nothing is left to resolve again
 - Static analysis only: no app runtime, no database, no test execution. Nothing here depends on a
   test passing — if you want that signal, run the suite yourself and re-sweep.
 - Snapshot, not a time series. Commit `docs/recon/` and `git log` is your history.
-- Costs scale with feature count — a 16-feature sweep is 16 subagents' worth of reading.
+- Costs scale with feature count **times lens count** — a 16-feature sweep is 16 subagents' worth of
+  reading, and `--lens all` is 48. The specialists are default-off for exactly this reason.
 
 ## License
 

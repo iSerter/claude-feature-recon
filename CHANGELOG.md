@@ -6,6 +6,71 @@ The `version` field in `.claude-plugin/plugin.json` is what Claude Code uses as 
 key: **users receive changes only when it is bumped.** Pushing commits without bumping it makes
 `/plugin update` report "already at the latest version". So every release here is one version bump.
 
+## [0.4.0] — 2026-07-30
+
+Review **lenses**. The sweep had one reviewer with ten things to check, so the items that lost were
+always the same ones: authorization got a glance rather than a pass, and empty/loading/error states
+were the tenth of ten that the budget ran out on. A feature can now be read by more than one
+specialist, each with its own method and its own file.
+
+**Default behaviour does not change.** `/feature-recon` with no arguments runs the product lens only,
+exactly as before, and a single-lens report renders exactly as it did.
+
+### Added
+
+- **`agents/`** — the review personas are first-class subagents now, not prose inlined into the
+  fan-out prompt: `recon-product-engineer` (the default, extracted unchanged in behaviour),
+  `recon-security` and `recon-ux`. Their descriptions are scoped to recon runs so they are not
+  auto-delegated to during unrelated work, and each writes a state file and fixes nothing.
+- **`--lens <product|security|ux|all>`** on `/feature-recon`. Opt-in, comma-separated, product-only by
+  default. Above ~20 agents (lenses × features) the sweep states the count and asks before spawning —
+  three lenses across sixteen features is 48 subagents and should never be a surprise.
+- **`reference/lens-security.md`** — threat-model method: name the assets, the entry points and the
+  guard, then read the guard rather than the flow. Ten places to look, severity anchors for abuse
+  paths, and a **what is not a security finding** list (CVE-scanner noise, unreachable theory, generic
+  hardening advice, anything needing a live probe).
+- **`reference/lens-ux.md`** — walk the *states*, not the screens: no data yet, still loading, failed,
+  half-worked, stuck. Ten things in scope including `a11y` defects, and an explicit out-of-scope list
+  (visual preference, copy that is already correct, redesign proposals) because this is the lens most
+  at risk of filing taste as defect.
+- **Per-lens state files.** `features/{slug}.security.json` and `features/{slug}.ux.json` alongside
+  the unchanged `features/{slug}.json`. Three agents cannot write one file, and per-lens files mean
+  re-running one lens does not clobber the others.
+- **The merge, in both builders.** Files are grouped by `slug`, findings concatenated product-lens
+  first and stamped with the lens that filed them, `surface` and `coverage` lists unioned, and
+  `maturity`/`state_summary`/`confidence`/`dependencies` taken from the product lens — a specialist
+  rates its own slice, not the feature. No product-lens file in a group falls back to the most
+  confident member and warns. Every existing count is derived from the merged feature, so the
+  arithmetic is unchanged.
+- **`lens` field** (`product` | `security` | `ux`) on the feature schema, absent meaning `product`, so
+  every report written before this release is still valid. Finding ids gain a lens segment for the
+  specialists (`billing-sec-bug-01`, `billing-ux-gap-01`); product ids do not move.
+- **`bug.type: a11y`.** Keyboard, focus, labelling and screen-reader defects were being filed as `ux`
+  and losing their category.
+- **Lens attribution in the dashboard** — a dashed lens chip on each finding, a lens filter in the
+  sticky bar, and a "Reviewed by" line on each feature. All of it appears only when more than one lens
+  ran; a single-lens report has no lens UI at all.
+- **A dedup pass in the rollup.** The same defect at the same `path:line` from two lenses collapses to
+  one entry, keeping the more specific write-up, before `project.json` is written. Overlap above ~20%
+  means the specialists are re-treading the primary flow and gets reported to the user.
+- **Multi-lens coverage in `tests/parity.sh`** — the fixture now has a feature with all three lens
+  files (one identified by its `lens` field, one by its filename) and a feature with no product lens
+  at all, so the merge and its fallback warning are inside the byte-parity diff. Plus a check that a
+  finding id shared by two lens files of one feature fails the build on both runtimes.
+
+### Changed
+
+- A finding id used by **two lens files of the same feature** is an `ERROR`, not a warning: ids are the
+  only handle `top_findings`, `cross_cutting` and `/feature-tasks` have on a finding, so a collision
+  makes those references ambiguous. A duplicate inside one file stays a warning.
+- The per-feature agent prompt is now four short items — the orientation brief, the feature, the
+  absolute paths, feature-specific pointers — because the stance, method, read-only rule and output
+  contract live in the agent definitions.
+- `/feature-tasks` gains `--lens`, reads every lens file, and each task's **Report updates** section
+  names the exact file a finding must be deleted from.
+- `--sequential` points at the agent definitions rather than restating them, so there is one source of
+  truth for how a lens works.
+
 ## [0.3.0] — 2026-07-30
 
 The sweep's prompts described **where to look** and **what shape to emit**, but never who to be or how

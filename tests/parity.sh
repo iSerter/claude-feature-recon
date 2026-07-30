@@ -29,6 +29,10 @@ has node && have_js=1 || echo "SKIP node (not installed)"
 # Deliberately nasty: non-ASCII, a '</script>' in prose, an unknown enum, a duplicate id, a
 # finding with no evidence, a dangling top_findings ref, and a feature file listed last that
 # project.json indexes first (so ordering is exercised).
+#
+# Multi-lens too, since the merge is the most complex thing either builder does: billing has all
+# three lenses (one declaring `lens`, one relying on the filename), and auth has two specialist
+# files and no product lens, so the maturity fallback and its WARN are exercised.
 make_fixture() {
   mkdir -p "$1/features"
   # A fake repo root, so the citation check activates and both runtimes must agree about it.
@@ -45,7 +49,8 @@ make_fixture() {
   "summary": "Unicode: café — a naïve </script> in prose must not break the data island",
   "features": [
     {"slug": "billing", "name": "Billing", "file": "features/billing.json"},
-    {"slug": "brands", "name": "Brands", "file": "features/brands.json"}
+    {"slug": "brands", "name": "Brands", "file": "features/brands.json"},
+    {"slug": "auth", "name": "Auth", "file": "features/auth.security.json"}
   ],
   "cross_cutting": [
     {"id": "xc-01", "title": "No input validation", "features": ["billing"],
@@ -86,6 +91,78 @@ EOF
                      "value": "medium", "effort": "S", "priority": "P2", "description": "d",
                      "evidence": ["b.php:3"]}],
   "dependencies": ["brands"], "open_questions": ["Who owns retries?"]
+}
+EOF
+  # Same slug, security lens: declares `lens`, and its `maturity`/`state_summary` must lose to the
+  # product file's. Repeats one route and one untested path, which must dedup on union.
+  cat > "$1/features/billing.security.json" <<'EOF'
+{
+  "schema_version": "1.0", "slug": "billing", "name": "Billing", "reviewed_at": "2026-07-30",
+  "lens": "security", "maturity": "stub", "confidence": "high",
+  "state_summary": "Webhook signature is never verified.",
+  "surface": {"routes": ["POST /billing", "POST /billing/webhook"], "external_deps": ["stripe"]},
+  "coverage": {"test_files": [], "tested_paths": [], "untested_paths": ["refunds", "webhook"],
+               "not_inspected": ["gateway rules"]},
+  "user_flows": [],
+  "bugs": [
+    {"id": "billing-sec-bug-01", "title": "Unverified webhook", "severity": "critical",
+     "type": "security", "description": "d", "repro": "r", "impact": "i",
+     "evidence": ["b.php:2"], "suggested_fix": "f", "effort": "S", "confidence": "high"}
+  ],
+  "gaps": [{"id": "billing-sec-gap-01", "title": "No replay protection",
+            "kind": "missing_validation", "description": "d", "expected_by": "x", "blocks": [],
+            "evidence": ["b.php:3"], "effort": "M", "priority": "P0"}],
+  "opportunities": [], "dependencies": [], "open_questions": ["Who owns retries?", "Rotate keys?"]
+}
+EOF
+  # Same slug, ux lens: no `lens` field at all, so the filename is what identifies it. Uses the
+  # a11y bug type.
+  cat > "$1/features/billing.ux.json" <<'EOF'
+{
+  "schema_version": "1.0", "slug": "billing", "name": "Billing", "reviewed_at": "2026-07-30",
+  "maturity": "alpha", "confidence": "medium", "state_summary": "No empty state anywhere.",
+  "surface": {"frontend_pages": ["resources/js/pages/billing/index.tsx"]},
+  "coverage": {"test_files": [], "tested_paths": [], "untested_paths": [], "not_inspected": []},
+  "user_flows": [{"name": "Read an invoice", "status": "partial", "breaks_at": "no error state",
+                  "evidence": ["b.php:4"]}],
+  "bugs": [
+    {"id": "billing-ux-bug-01", "title": "Icon-only button has no name", "severity": "medium",
+     "type": "a11y", "description": "d", "repro": "r", "impact": "i", "evidence": ["b.php:1"],
+     "suggested_fix": "f", "effort": "S", "confidence": "high"}
+  ],
+  "gaps": [], "opportunities": [], "dependencies": [], "open_questions": []
+}
+EOF
+  # A feature no product lens ever read: the builder must fall back to the most confident
+  # specialist (ux, high) for maturity and warn about it.
+  cat > "$1/features/auth.security.json" <<'EOF'
+{
+  "schema_version": "1.0", "slug": "auth", "name": "Auth", "reviewed_at": "2026-07-30",
+  "lens": "security", "maturity": "beta", "confidence": "low", "state_summary": "Reset is weak.",
+  "surface": {"routes": ["POST /auth/reset"], "controllers": [], "packages": [], "models": [],
+              "frontend_pages": [], "queues_jobs": [], "external_deps": []},
+  "coverage": {"test_files": [], "tested_paths": [], "untested_paths": [],
+               "not_inspected": ["session store"]},
+  "user_flows": [],
+  "bugs": [{"id": "auth-sec-bug-01", "title": "Reset token is not single-use",
+            "severity": "high", "type": "security", "description": "d", "repro": "r",
+            "impact": "i", "evidence": ["b.php:2"], "suggested_fix": "f", "effort": "M",
+            "confidence": "medium"}],
+  "gaps": [], "opportunities": [], "dependencies": [], "open_questions": []
+}
+EOF
+  cat > "$1/features/auth.ux.json" <<'EOF'
+{
+  "schema_version": "1.0", "slug": "auth", "name": "Auth", "reviewed_at": "2026-07-30",
+  "lens": "ux", "maturity": "stub", "confidence": "high",
+  "state_summary": "Reset form never says the email went out.",
+  "surface": {"frontend_pages": ["resources/js/pages/auth/reset.tsx"]},
+  "coverage": {"test_files": [], "tested_paths": [], "untested_paths": [], "not_inspected": []},
+  "user_flows": [],
+  "bugs": [{"id": "auth-ux-bug-01", "title": "No confirmation after reset request",
+            "severity": "medium", "type": "ux", "description": "d", "repro": "r", "impact": "i",
+            "evidence": ["b.php:3"], "suggested_fix": "f", "effort": "S", "confidence": "high"}],
+  "gaps": [], "opportunities": [], "dependencies": ["billing"], "open_questions": []
 }
 EOF
   cat > "$1/features/brands.json" <<'EOF'
@@ -145,6 +222,32 @@ if [ "$have_py" = 1 ] && [ "$have_js" = 1 ]; then
   [ "$(grep -c "weird_status" "$tmp/py.err")" = 1 ] \
     || fail "a warning must be printed once, not repeated by the second report()"
 
+  # --- the merge -----------------------------------------------------------------------------
+  grep -q "features/auth: no product-lens file" "$tmp/py.err" \
+    || fail "a feature with only specialist lens files must warn"
+  grep -q "3 features, 6 bugs, 2 critical, 2 gaps, 1 opportunities" "$tmp/py.out" \
+    || fail "merged totals are wrong: $(cat "$tmp/py.out")"
+
+  # One row per feature, not per lens file; billing's four bugs come from three files; and the
+  # product lens owns the maturity even though the security lens rated the same feature a stub.
+  merged=$(python3 - "$tmp/py/project.json" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+b = [f for f in d["features"] if f["slug"] == "billing"][0]
+print(len(d["features"]), b["maturity"], b["counts"]["bugs"])
+PY
+)
+  [ "$merged" = "3 alpha 4" ] || fail "billing's three lens files did not merge: $merged"
+
+  # What the dashboard renders from: the data island. The chip and filter themselves are drawn by
+  # the template's JS, which nothing here can execute — these check the inputs it draws them from.
+  h="$tmp/py/recon-report.html"
+  grep -q '"lens":"security"' "$h" || fail "findings reach the dashboard with no lens attribution"
+  grep -q '"lenses":\["product","security","ux"\]' "$h" \
+    || fail "the merged feature does not tell the dashboard which lenses reviewed it"
+  grep -q "billing-sec-bug-01" "$h" || fail "a specialist lens's finding is missing from the report"
+  echo "PASS per-lens files merge (billing ×3, auth fallback, lens attribution in the payload)"
+
   # A report must rebuild identically from its own rewritten project.json (idempotence), and
   # the other runtime must accept what this one wrote.
   cp "$tmp/py/recon-report.html" "$tmp/first.html"
@@ -154,6 +257,24 @@ if [ "$have_py" = 1 ] && [ "$have_js" = 1 ]; then
 else
   echo "SKIP byte parity (needs both runtimes)"
 fi
+
+# --- one id cannot belong to two lenses of one feature --------------------------------------
+# A WARN would not do: ids are the only handle top_findings, cross_cutting and feature-tasks have
+# on a finding, so a collision across lens files has to stop the build.
+make_fixture "$tmp/dup"
+sed 's/billing-sec-bug-01/billing-bug-01/' "$tmp/dup/features/billing.security.json" \
+  > "$tmp/dup/features/billing.security.json.new"
+mv "$tmp/dup/features/billing.security.json.new" "$tmp/dup/features/billing.security.json"
+for rt in python3 node; do
+  has "$rt" || continue
+  case $rt in python3) s="$skill/build_report.py";; node) s="$skill/build_report.js";; esac
+  if "$rt" "$s" "$tmp/dup" >"$tmp/dup.out" 2>"$tmp/dup.err"; then
+    fail "$rt built a report with the same finding id in two lens files"
+  fi
+  grep -q "ERROR .*billing-bug-01.* two lenses of the same feature" "$tmp/dup.err" \
+    || fail "$rt did not name the cross-lens id collision: $(cat "$tmp/dup.err")"
+done
+echo "PASS a finding id shared by two lenses of one feature is an ERROR"
 
 # --- --check catches broken JSON ------------------------------------------------------------
 make_fixture "$tmp/bad"
