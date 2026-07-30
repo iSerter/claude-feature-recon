@@ -720,6 +720,19 @@ ul.tops .ref {
 footer {
   margin-top: 72px; padding-top: 22px; border-top: 1px solid var(--grid);
   font-size: 12px; color: var(--muted); display: flex; gap: 16px; flex-wrap: wrap;
+  align-items: center;
+}
+footer .credit { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+footer .credit .heart { color: #e0245e; font-style: normal; }
+footer .credit b { color: var(--ink); font-weight: 650; }
+footer .credit a {
+  color: var(--accent); font-weight: 600;
+  border-bottom: 1px solid transparent; transition: border-color .15s;
+}
+footer .credit a:hover { border-bottom-color: currentColor; }
+footer .credit .sep { color: var(--grid); }
+@media (max-width: 620px) {
+  footer .credit { margin-left: 0; }
 }
 
 /* ---------- motion ---------- */
@@ -1863,6 +1876,12 @@ footer {
         "<span>" + (live
           ? "Static read plus a live browser run — no database written, no application code changed"
           : "Static read-only sweep — no runtime, no database, no tests executed") +
+        "</span>" +
+        '<span class="credit">Made with <i class="heart">&#10084;</i> by <b>Ilyas Serter</b>' +
+          '<span class="sep">&#183;</span>' +
+          '<a href="https://www.iserter.com" target="_blank" rel="noopener noreferrer">iserter.com</a>' +
+          '<span class="sep">&#183;</span>' +
+          '<a href="https://www.linkedin.com/in/iserter/" target="_blank" rel="noopener noreferrer">LinkedIn</a>' +
         "</span></footer>";
     bar.innerHTML = topbar();
     wire();
