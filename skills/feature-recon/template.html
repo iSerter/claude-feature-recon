@@ -314,34 +314,30 @@ a.crewchip .head {
 a.crewchip .cn { font-size: 13px; font-weight: 650; letter-spacing: -0.01em; }
 a.crewchip .cc { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
 
-/* crew gallery */
-.crew { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; }
+/* crew gallery — portrait left, numbers right. The figure is a face on the card, not the card. */
+.crew { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 16px; }
 .crewcard {
-  display: flex; flex-direction: column;
+  display: flex; align-items: flex-start; gap: 14px; padding: 14px;
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--r);
-  overflow: hidden; box-shadow: var(--shadow);
+  box-shadow: var(--shadow);
   transition: transform .16s ease, box-shadow .16s ease;
 }
 .crewcard:hover { transform: translateY(-3px); box-shadow: var(--shadow-lift); }
-.crewcard .plate { border-radius: 0; aspect-ratio: 1 / 1.06; }
-.crewcard .plate img { object-position: 50% 6%; }
-/* The role badge sits on the plate, so the portrait is never a mystery photo. */
-.crewcard .badge {
-  position: absolute; left: 10px; bottom: 10px; right: 10px;
-  display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap;
-  font-size: 11px; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase;
-  color: #3d4658;
-}
-.crewcard .badge .lens-label {
-  background: rgba(255,255,255,0.78); border-radius: 5px; padding: 2px 7px;
-  backdrop-filter: blur(4px);
-}
-.crewcard .cbody { padding: 14px 15px 15px; display: flex; flex-direction: column; gap: 9px; }
+.crewcard .plate { width: 76px; aspect-ratio: 3 / 4; }
+.crewcard .plate img { object-position: 50% 8%; }
+.crewcard .plate .mono-fallback { font-size: 24px; }
+.crewcard .cbody { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.crewcard .chead { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
 .crewcard .crole { font-size: 14.5px; font-weight: 650; letter-spacing: -0.012em; }
+/* The lens name, so the portrait is never a mystery photo. */
+.crewcard .lens-label {
+  font-size: 10.5px; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--muted); background: var(--wash); border-radius: 5px; padding: 2px 7px;
+}
 .crewcard .cblurb { font-size: 12.5px; color: var(--ink-2); line-height: 1.5; }
 .crewcard .cstats {
   display: flex; flex-wrap: wrap; gap: 3px 12px; font-size: 11.5px; color: var(--muted);
-  font-variant-numeric: tabular-nums; margin-top: auto; padding-top: 3px;
+  font-variant-numeric: tabular-nums; margin-top: auto; padding-top: 1px;
 }
 .crewcard .cstats b { color: var(--ink); font-weight: 650; }
 
@@ -763,9 +759,9 @@ footer .credit .sep { color: var(--grid); }
   .row { grid-template-columns: 104px 1fr 30px; gap: 10px; }
   .kv { grid-template-columns: 1fr; }
   .find .fid { margin-left: 0; }
-  .crew { grid-template-columns: 1fr 1fr; }
+  .crew { grid-template-columns: 1fr; }
   .crewrail .rlead { max-width: none; width: 100%; margin-bottom: 2px; }
-  .crewcard .cblurb { display: none; }
+  .crewcard .plate { width: 62px; }
 }
 @media print {
   .topbar, .filters, .toggles, .iconbtn { display: none !important; }
@@ -1067,13 +1063,13 @@ footer .credit .sep { color: var(--grid); }
           "%;background:var(--sev-" + s + ')"></i>' : "";
       }).join("");
       return '<div class="crewcard" style="animation-delay:' + (i * 70) + 'ms">' +
-        portrait(l, tip(meta.role + " — " + meta.blurb),
-          '<div class="badge"><span class="lens-label">' + esc(meta.label) + "</span></div>") +
+        portrait(l, tip(meta.role + " — " + meta.blurb)) +
         '<div class="cbody">' +
-          '<div class="crole">' + esc(meta.role) + "</div>" +
+          '<div class="chead"><span class="crole">' + esc(meta.role) + "</span>" +
+            '<span class="lens-label">' + esc(meta.label) + "</span></div>" +
           '<div class="cblurb">' + esc(meta.blurb) + "</div>" +
-          (b.bug ? '<div class="bar" style="height:6px;display:flex;border-radius:0 4px 4px 0;' +
-            'background:var(--wash)"' + tip(plural(b.bug, "bug") + " — " +
+          (b.bug ? '<div class="bar" style="height:6px;display:flex;border-radius:4px;' +
+            'overflow:hidden;background:var(--wash)"' + tip(plural(b.bug, "bug") + " — " +
               SEVERITY.filter(function (s) { return b.sev[s]; }).map(function (s) {
                 return b.sev[s] + " " + s;
               }).join(", ")) + ">" + sevBar + "</div>" : "") +
