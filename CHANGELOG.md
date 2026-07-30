@@ -6,6 +6,57 @@ The `version` field in `.claude-plugin/plugin.json` is what Claude Code uses as 
 key: **users receive changes only when it is bumped.** Pushing commits without bumping it makes
 `/plugin update` report "already at the latest version". So every release here is one version bump.
 
+## [0.6.0] — 2026-07-30
+
+The report gets a face. The dashboard was accurate and dull — a wall of correct bars that nobody
+opened twice. This release spends its ink where a reader's attention actually lands: a full-bleed
+cover, the review lenses drawn as the people they stand in for, and four charts that answer
+questions the old sections could not.
+
+### The review crew
+
+The four lenses now have portraits, and the report leads with them. The cover carries a line-up of
+whoever reviewed the codebase and how much each one filed; a new **The review crew** section gives
+each lens a card — role, what it went looking for, features seen, and its own bug/gap/opportunity
+split — followed by a stacked bar comparing what each lens contributed.
+
+**The `e2e` lens finally reaches the UI.** It has been a first-class lens in the builders, the spec
+and the parity fixture since 0.5.0, but `template.html` ordered lenses with a list that did not
+contain it, so *Live browser* was an unrecognised value that only sorted last by accident. It is now
+a full member: portrait, crew card, filter entry, and a cover stamp that reads
+*Static read + live browser* rather than the *no runtime* claim that a browser pass makes untrue.
+
+A single-lens sweep still gets one crew card — a face on the report is not noise — but the
+contribution chart, the lens pill and the lens filter stay gated on a second lens, as before.
+
+### Four new charts
+
+- **Risk map** — every feature as a bubble: maturity across, severity weight up, area is total
+  findings. Plotted on a square-root scale (one critical bug is worth 1000 and would otherwise
+  flatten the field) with dashed lines marking where one bug of each severity would sit. Features
+  sharing a maturity spread across their band instead of stacking. Click a bubble to open it.
+- **What kind of broken** — the same bugs cut by `type` rather than by feature, split by severity.
+  A tall single category means one habit repeated, not one bug per feature.
+- **User-flow health** — working / partial / broken / not implemented across the whole project and
+  then per feature. Flow state was previously only a stat tile and a per-feature list.
+- **What each lens filed** — per-lens findings by kind, inside the crew section.
+
+### Everything else
+
+- Cover rebuilt as a full-bleed band with layered glows, a masked mesh and a larger gauge.
+- Section headers carry a running index; the nav is built from the sections that actually rendered.
+- A scroll-progress hairline under the topbar.
+- Stat tiles gained a share meter, so a tile reading `7` also says seven out of what.
+- Portraits are **inlined as `data:` URIs** by both builders, from
+  `skills/feature-recon/assets/lens-{lens}.jpg`. They ride in their own data island, so `Copy JSON`
+  still hands you clean JSON and not a quarter megabyte of base64 — and the report stays one file
+  that works from any path, including `--out` somewhere else entirely. A build with no `assets/`
+  directory falls back to a monogram and is otherwise identical.
+- Adds ~250KB to a report. A 14-feature dashboard lands around 430KB.
+
+No JSON schema change. Existing recon directories rebuild into the new dashboard with
+`build_report.sh <recon-dir>` and no edits.
+
 ## [0.5.0] — 2026-07-30
 
 The app opens. Until now every finding in a report was an inference from reading code — accurate

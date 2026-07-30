@@ -43,6 +43,7 @@ const FEATURE_KEYS = ["slug", "name", "maturity", "confidence", "state_summary",
   "dependencies", "open_questions"];
 
 const PLACEHOLDER = '<script id="recon-data" type="application/json">';
+const ASSET_PLACEHOLDER = '<script id="recon-assets" type="application/json">';
 
 const DOC = [
   "Build a self-contained HTML dashboard from feature-recon JSON state files.",
@@ -483,18 +484,54 @@ function dumpsAscii(value) {
     (c) => "\\u" + c.charCodeAt(0).toString(16).padStart(4, "0"));
 }
 
-function render(template, payload) {
-  if (!template.includes(PLACEHOLDER)) {
-    throw new Exit(`template is missing the ${repr(PLACEHOLDER)} data slot`);
+/**
+ * The lens portraits, base64'd into `data:` URIs, keyed by lens.
+ *
+ * Looked for in `assets/` beside the template, so `--template /tmp/mine.html` can ship its own
+ * art, falling back to the one beside this script. Iterating LENS rather than listing the
+ * directory is what makes the key order identical in both runtimes.
+ *
+ * A missing file is skipped and a missing directory yields `{}` — the dashboard falls back to a
+ * monogram, so an install without the images still builds.
+ */
+function loadAssets(templatePath) {
+  const roots = [path.join(path.dirname(templatePath), "assets"), path.join(__dirname, "assets")];
+  const assets = {};
+  for (const lens of LENS) {
+    for (const root of roots) {
+      let raw;
+      try {
+        raw = fs.readFileSync(path.join(root, `lens-${lens}.jpg`));
+      } catch {
+        continue;
+      }
+      assets[lens] = "data:image/jpeg;base64," + raw.toString("base64");
+      break;
+    }
   }
-  const blob = dumpsAscii(payload).replace(/<\//g, "<\\/");
-  const start = template.indexOf(PLACEHOLDER);
+  return assets;
+}
+
+/** Replace the contents of one `<script>` data island, leaving the rest of the file alone. */
+function fillSlot(template, placeholder, value, what) {
+  if (!template.includes(placeholder)) {
+    throw new Exit(`template is missing the ${repr(placeholder)} ${what} slot`);
+  }
+  const blob = dumpsAscii(value).replace(/<\//g, "<\\/");
+  const start = template.indexOf(placeholder);
   const head = template.slice(0, start);
-  const rest = template.slice(start + PLACEHOLDER.length);
+  const rest = template.slice(start + placeholder.length);
   const close = rest.indexOf("</script>");
-  if (close === -1) throw new Exit("template's recon-data script tag is never closed");
+  if (close === -1) throw new Exit(`template's ${what} script tag is never closed`);
   const tail = rest.slice(close + "</script>".length);
-  return `${head}${PLACEHOLDER}${blob}</script>${tail}`;
+  return `${head}${placeholder}${blob}</script>${tail}`;
+}
+
+function render(template, payload, assets) {
+  // Assets ride in their own island: `Copy JSON` hands the reader `payload`, and a quarter of a
+  // megabyte of base64 in the clipboard would make that button useless.
+  return fillSlot(fillSlot(template, PLACEHOLDER, payload, "data"),
+    ASSET_PLACEHOLDER, assets, "asset");
 }
 
 function featurePaths(reconDir) {
@@ -563,7 +600,7 @@ function build(reconDir, outPath = null, templatePath = null) {
   const template = templatePath || path.join(__dirname, "template.html");
   const out = outPath || path.join(reconDir, "recon-report.html");
   fs.writeFileSync(out, render(fs.readFileSync(template, "utf8"),
-    { project, features: ordered }));
+    { project, features: ordered }, loadAssets(template)));
   return { out, project };
 }
 
@@ -704,6 +741,15 @@ function selftest() {
     eq(payload.project.project_name, "Fixture", "payload project_name");
     eq(payload.features.map((f) => f.slug), ["alpha", "beta"], "payload feature order");
     assert(html.includes("Fixture"), "rendered HTML does not mention the project name");
+
+    // The lens portraits are inlined, and they stay out of the payload the Copy JSON button
+    // hands the reader.
+    const assetStart = html.indexOf(ASSET_PLACEHOLDER) + ASSET_PLACEHOLDER.length;
+    const assets = JSON.parse(html.slice(assetStart, html.indexOf("</script>", assetStart)));
+    eq(Object.keys(assets), LENS, "inlined lens portraits");
+    assert(Object.values(assets).every((v) => v.startsWith("data:image/jpeg;base64,")),
+      "a lens portrait is not a jpeg data URI");
+    assert(!JSON.stringify(payload).includes("base64"), "base64 leaked into the Copy JSON payload");
 
     // the two alpha lens files merged into one feature, product lens first and in charge
     const alpha = payload.features[0];

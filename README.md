@@ -86,6 +86,7 @@ docs/recon/
   features/{slug}.json            one per feature: maturity, surface, coverage, flows, bugs, gaps, opps
   features/{slug}.security.json   only with --lens security
   features/{slug}.ux.json         only with --lens ux
+  features/{slug}.e2e.json        only after /test-user-flows — see below
   recon-report.html               the dashboard — one file, opens by double-click, works offline
 ```
 
@@ -199,22 +200,27 @@ verified is the flow the camera films.
 ## The dashboard
 
 One file. No chart library, no CDN, no build step, no network access at runtime — every chart is
-hand-rolled SVG and CSS, so it opens by double-click and keeps working offline five years from now.
+hand-rolled SVG and CSS, and the four lens portraits are inlined as `data:` URIs, so it opens by
+double-click from any path and keeps working offline five years from now.
 
 | Section | What it shows |
 |---|---|
-| Cover | Readiness gauge — two rings: production-ready inside, beta-or-better outside |
+| Cover | Readiness gauge — two rings: production-ready inside, beta-or-better outside — over a crew line-up of the lenses that ran |
+| The review crew | A card per lens: who it is, what it went looking for, and what it filed. With more than one lens, a stacked bar of each lens's bugs, gaps and opportunities |
 | Maturity mix | One stacked bar across all features, stub → production-ready |
-| Headline numbers | Critical bugs, high bugs, flows that don't complete, features without tests, low-confidence reads |
+| Headline numbers | Critical bugs, high bugs, flows that don't complete, features without tests, low-confidence reads — each with its share of the whole |
 | Verdict | The rollup's prose assessment |
+| Risk map | Every feature as a bubble: maturity across, severity weight up, area is total findings. High and to the left is unfinished *and* dangerous |
 | Bugs by feature | Stacked severity bars, ordered by severity weight — click a row to jump to that feature |
+| What kind of broken | The same bugs cut by type — runtime error, logic, data integrity, security, performance, UX, a11y, regression — split by severity |
+| User-flow health | Working / partial / broken / not implemented across the project, then per feature |
 | Planning | Two heat grids: bugs by severity × effort, gaps & opportunities by priority × effort. The dark corner is where the work is pooled |
 | Dependency map | Feature × feature matrix, plus which features are most depended on |
 | Cross-cutting | One root cause spanning many features, with the affected features as jump links |
 | Where to start | Biggest findings and the recommended fix sequence |
 | Features | A card per feature — maturity, severity bar, counts — clicking one opens its full read |
-| Every finding | Sticky filters (kind, severity, maturity, effort, priority, full-text) over per-feature drill-downs with every cited `path:line` |
-| Lens attribution | With more than one lens, each finding carries the lens that filed it and the filter bar gains a lens selector. A single-lens report shows none of this |
+| Every finding | Sticky filters (kind, severity, maturity, effort, priority, lens, full-text) over per-feature drill-downs with every cited `path:line` |
+| Lens attribution | With more than one lens, each finding carries the lens that filed it — `product`, `security`, `ux` or `e2e` (*Live browser*) — and the filter bar gains a lens selector. A single-lens report shows one crew card and none of the rest |
 
 Light and dark themes with a toggle that persists, deep links (`#feature-slug`), a sortable data
 table, keyboard `/` to search, `Copy JSON`, and print styles.
@@ -223,7 +229,8 @@ table, keyboard `/` to search, `Copy JSON`, and print styles.
 for severity — each an ordinal ramp validated with the [`dataviz`](https://github.com/anthropics/skills)
 palette validator in both light and dark (monotone lightness, adjacent ΔL ≥ 0.06, light end ≥ 2:1
 against its surface). Severity and status are always named in text, never carried by color alone,
-and the reserved status palette is used only for flow state.
+and the reserved status palette is used only for flow state. Which lens filed a finding is carried
+by its portrait and its label — never by a hue, so no lens competes with severity for meaning.
 
 ## Rebuild the dashboard without re-running the sweep
 

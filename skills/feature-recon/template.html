@@ -135,6 +135,9 @@ body {
   margin: 0; background: var(--page); color: var(--ink);
   font: 15px/1.6 var(--sans); -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  /* The hero breaks out of .wrap to full-bleed; clip (not hidden) keeps that from ever
+     producing a horizontal scrollbar without making the page a scroll container. */
+  overflow-x: clip;
 }
 .wrap { max-width: 1200px; margin: 0 auto; padding: 0 28px 120px; }
 h1, h2, h3, h4 { margin: 0; font-weight: 600; letter-spacing: -0.015em; }
@@ -179,28 +182,61 @@ nav.jump a:hover { background: var(--wash); color: var(--ink); }
   border: 1px solid var(--border); background: var(--surface); color: var(--ink-2);
 }
 .iconbtn:hover { background: var(--wash); color: var(--ink); }
+/* Read position, as a hairline under the topbar. Width is set from one passive scroll listener. */
+.topbar .progress {
+  position: absolute; left: 0; bottom: -1px; height: 2px; width: 0;
+  background: linear-gradient(90deg, var(--accent), var(--mat-production_ready));
+  border-radius: 0 2px 2px 0; pointer-events: none;
+}
 
-/* ---------- cover ---------- */
-.cover { position: relative; padding: 60px 0 8px; }
-.cover::before {
-  content: ""; position: absolute; inset: -40px -200px auto -200px; height: 420px;
+/* ---------- cover ----------
+   Full-bleed band: the one place in the report that spends ink on atmosphere. Everything below
+   it stays flat and quiet, so the drama reads as a title sequence rather than as decoration
+   competing with the data. */
+.cover {
+  position: relative; isolation: isolate;
+  margin-inline: calc(50% - 50vw); padding-inline: max(28px, calc(50vw - 600px));
+  padding-block: 62px 34px; margin-bottom: 8px;
+  border-bottom: 1px solid var(--border-2);
+  background: linear-gradient(180deg, var(--surface-2) 0%, var(--page) 78%);
+}
+/* Two glows and a hairline mesh. Separate layers so print can drop them in one rule. */
+.cover .bg {
+  position: absolute; inset: 0; z-index: -1; pointer-events: none; overflow: hidden;
+}
+.cover .bg::before {
+  content: ""; position: absolute; inset: -30% -10% auto -10%; height: 150%;
   background:
-    radial-gradient(58% 70% at 22% 12%, var(--accent-soft), transparent 70%),
-    radial-gradient(42% 60% at 84% 0%, var(--accent-soft), transparent 72%);
-  pointer-events: none; z-index: -1;
+    radial-gradient(46% 58% at 18% 8%, var(--accent-soft), transparent 68%),
+    radial-gradient(38% 52% at 88% 2%, var(--accent-soft), transparent 70%),
+    radial-gradient(30% 44% at 62% 96%, var(--accent-soft), transparent 72%);
+}
+.cover .bg::after {
+  content: ""; position: absolute; inset: 0;
+  background-image:
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 62px 62px;
+  opacity: 0.4;
+  mask-image: radial-gradient(72% 88% at 50% 0%, #000 0%, transparent 76%);
+  -webkit-mask-image: radial-gradient(72% 88% at 50% 0%, #000 0%, transparent 76%);
 }
 .cover-grid { display: grid; grid-template-columns: 1fr auto; gap: 56px; align-items: center; }
 .eyebrow {
   font-size: 11.5px; letter-spacing: 0.16em; text-transform: uppercase;
   color: var(--muted); font-weight: 600;
+  display: inline-flex; align-items: center; gap: 10px;
+}
+.eyebrow::before {
+  content: ""; width: 20px; height: 2px; border-radius: 2px; background: var(--accent);
 }
 .cover h1 {
-  font-size: clamp(38px, 6vw, 62px); line-height: 1.02; letter-spacing: -0.035em;
-  margin: 14px 0 0; font-weight: 650;
+  font-size: clamp(42px, 7.4vw, 82px); line-height: 0.98; letter-spacing: -0.042em;
+  margin: 16px 0 0; font-weight: 660;
 }
-.cover .lede { margin-top: 16px; max-width: 60ch; font-size: 16px; color: var(--ink-2); }
+.cover .lede { margin-top: 18px; max-width: 58ch; font-size: 16.5px; color: var(--ink-2); }
 .stampline {
-  margin-top: 22px; display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center;
+  margin-top: 24px; display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center;
 }
 .stamp {
   display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--ink-2);
@@ -210,7 +246,12 @@ nav.jump a:hover { background: var(--wash); color: var(--ink); }
 .stamp b { color: var(--ink); font-weight: 600; }
 
 /* gauge */
-.gauge { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.gauge { position: relative; display: flex; flex-direction: column; align-items: center; gap: 16px; }
+.gauge::before {
+  content: ""; position: absolute; top: -18px; left: 50%; width: 300px; height: 300px;
+  transform: translateX(-50%); z-index: -1; pointer-events: none;
+  background: radial-gradient(closest-side, var(--accent-soft), transparent 72%);
+}
 .gauge svg { display: block; }
 .gauge .ring-track { stroke: var(--seq-1); }
 .gauge .ring-beta { stroke: var(--mat-alpha); }
@@ -224,11 +265,97 @@ nav.jump a:hover { background: var(--wash); color: var(--ink); }
 .gauge .gl span { display: inline-flex; align-items: center; gap: 8px; }
 .gauge .gl b { color: var(--ink); }
 
+/* ---------- lens portraits ----------
+   The renders are figures on pure white. A plate that stays light in BOTH themes, plus multiply,
+   drops that white into the plate instead of punching a glaring box through a dark page. */
+.plate {
+  position: relative; overflow: hidden; border-radius: var(--r-sm);
+  background: linear-gradient(165deg, #f6f8fb 0%, #e4e9f1 62%, #d8dfea 100%);
+  aspect-ratio: 2 / 3; flex: none;
+  /* Isolate, or multiply reaches past the plate and blends the figure into whatever surface is
+     behind the card — which in dark mode turns the portrait into a grey smudge. */
+  isolation: isolate;
+}
+.plate img {
+  display: block; width: 100%; height: 100%; object-fit: cover; object-position: 50% 45%;
+  mix-blend-mode: multiply;
+}
+/* Without multiply the white simply reads as part of an already-light plate — still fine. */
+@supports not (mix-blend-mode: multiply) { .plate img { mix-blend-mode: normal; } }
+@media (forced-colors: active) { .plate img { mix-blend-mode: normal; } }
+/* No portrait for this lens: a monogram, so the card keeps its shape. */
+.plate .mono-fallback {
+  position: absolute; inset: 0; display: grid; place-items: center;
+  font: 600 30px/1 var(--sans); color: #7d8798; letter-spacing: -0.02em;
+}
+
+/* crew rail — the line-up along the bottom of the hero */
+.crewrail {
+  margin-top: 34px; padding-top: 22px; border-top: 1px solid var(--border-2);
+  display: flex; flex-wrap: wrap; gap: 10px 12px; align-items: stretch;
+}
+.crewrail .rlead {
+  font-size: 11.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted);
+  font-weight: 650; align-self: center; margin-right: 6px; max-width: 96px; line-height: 1.35;
+}
+a.crewchip {
+  display: flex; align-items: center; gap: 11px; padding: 7px 14px 7px 7px;
+  border: 1px solid var(--border); border-radius: 999px; background: var(--surface);
+  box-shadow: var(--shadow); transition: transform .16s ease, box-shadow .16s ease;
+}
+a.crewchip:hover { transform: translateY(-2px); box-shadow: var(--shadow-lift); }
+/* At 36px a whole standing figure is an unreadable speck, so the chip zooms to the head. A
+   background image is what makes that croppable to a fixed point without a wrapper per lens. */
+a.crewchip .head {
+  width: 36px; height: 36px; border-radius: 999px; flex: none;
+  background-color: #eef1f6; background-repeat: no-repeat;
+  background-size: 310%; background-position: 50% 5%; background-blend-mode: multiply;
+}
+a.crewchip .cn { font-size: 13px; font-weight: 650; letter-spacing: -0.01em; }
+a.crewchip .cc { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* crew gallery */
+.crew { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; }
+.crewcard {
+  display: flex; flex-direction: column;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--r);
+  overflow: hidden; box-shadow: var(--shadow);
+  transition: transform .16s ease, box-shadow .16s ease;
+}
+.crewcard:hover { transform: translateY(-3px); box-shadow: var(--shadow-lift); }
+.crewcard .plate { border-radius: 0; aspect-ratio: 1 / 1.06; }
+.crewcard .plate img { object-position: 50% 6%; }
+/* The role badge sits on the plate, so the portrait is never a mystery photo. */
+.crewcard .badge {
+  position: absolute; left: 10px; bottom: 10px; right: 10px;
+  display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap;
+  font-size: 11px; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase;
+  color: #3d4658;
+}
+.crewcard .badge .lens-label {
+  background: rgba(255,255,255,0.78); border-radius: 5px; padding: 2px 7px;
+  backdrop-filter: blur(4px);
+}
+.crewcard .cbody { padding: 14px 15px 15px; display: flex; flex-direction: column; gap: 9px; }
+.crewcard .crole { font-size: 14.5px; font-weight: 650; letter-spacing: -0.012em; }
+.crewcard .cblurb { font-size: 12.5px; color: var(--ink-2); line-height: 1.5; }
+.crewcard .cstats {
+  display: flex; flex-wrap: wrap; gap: 3px 12px; font-size: 11.5px; color: var(--muted);
+  font-variant-numeric: tabular-nums; margin-top: auto; padding-top: 3px;
+}
+.crewcard .cstats b { color: var(--ink); font-weight: 650; }
+
 /* ---------- section scaffolding ---------- */
 .sec { margin-top: 52px; scroll-margin-top: 80px; }
 .sec > header.sh {
-  display: flex; align-items: baseline; gap: 14px; margin-bottom: 16px;
+  display: flex; align-items: baseline; gap: 12px; margin-bottom: 16px;
   border-bottom: 1px solid var(--grid); padding-bottom: 9px;
+}
+/* A running index, so the report scans as a document rather than a pile of widgets. */
+.sec > header.sh .ix {
+  font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--accent);
+  background: var(--accent-soft); border-radius: 5px; padding: 2px 6px;
+  letter-spacing: 0.02em; align-self: center;
 }
 .sec > header.sh h2 {
   font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em;
@@ -274,7 +401,15 @@ nav.jump a:hover { background: var(--wash); color: var(--ink); }
 :root[data-theme="dark"] .seg.m-missing { color: #ffffff; }
 :root[data-theme="dark"] .seg.m-production_ready { color: #0b0b0b; }
 
+/* Flow state uses the reserved status palette — the one thing it is licensed for. Fixed in both
+   themes, so the label ink is fixed with it. */
+.seg.f-working { background: var(--st-good); color: #ffffff; }
+.seg.f-partial { background: var(--st-warning); color: #0b0b0b; }
+.seg.f-broken { background: var(--st-critical); color: #ffffff; }
+.seg.f-not_implemented { background: var(--muted); color: #ffffff; }
+
 .maturity-band .stack { height: 34px; }
+.band .stack { height: 30px; }
 .legend { display: flex; flex-wrap: wrap; gap: 8px 22px; margin-top: 16px; font-size: 12.5px; color: var(--ink-2); }
 .legend .key { display: inline-flex; align-items: center; gap: 8px; }
 .legend .key.off { opacity: 0.45; }
@@ -294,6 +429,9 @@ nav.jump a:hover { background: var(--wash); color: var(--ink); }
 .tile .v { font-size: 38px; font-weight: 650; line-height: 1.05; letter-spacing: -0.035em; }
 .tile .l { margin-top: 5px; font-size: 12.5px; color: var(--ink-2); display: flex; align-items: center; gap: 7px; font-weight: 500; }
 .tile .sub { margin-top: 7px; font-size: 12px; color: var(--muted); line-height: 1.45; }
+/* Share of the whole, under the count — a tile that reads 7 says nothing about 7 out of what. */
+.tile .meter { margin-top: 11px; height: 4px; border-radius: 0 3px 3px 0; background: var(--wash); }
+.tile .meter i { display: block; height: 100%; border-radius: 0 3px 3px 0; background: var(--seq-3); }
 .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
 
 /* ---------- verdict ---------- */
@@ -316,6 +454,24 @@ nav.jump a:hover { background: var(--wash); color: var(--ink); }
 .row .track .stack { height: 16px; }
 .row .rval { font-size: 12.5px; color: var(--ink-2); font-variant-numeric: tabular-nums; text-align: right; }
 .axis-note { margin-top: 16px; font-size: 12px; color: var(--muted); line-height: 1.5; }
+
+/* ---------- risk map ----------
+   maturity (x) x severity weight (y), area = findings. The one chart that answers "which feature
+   should worry me", by putting immature-and-dangerous in a corner you cannot miss. */
+.riskmap { width: 100%; height: auto; display: block; overflow: visible; }
+.riskmap .axis { stroke: var(--grid); stroke-width: 1; }
+.riskmap .axis-lab { fill: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: 0.04em; }
+.riskmap .quad { fill: var(--wash); }
+.riskmap .quad-lab {
+  fill: var(--muted); font-size: 10.5px; font-weight: 650;
+  letter-spacing: 0.09em; text-transform: uppercase;
+}
+.riskmap .bub {
+  fill: var(--accent); fill-opacity: 0.5;
+  stroke: var(--surface); stroke-width: 2; cursor: pointer;
+}
+.riskmap .bub:hover { fill-opacity: 0.78; stroke: var(--ink); }
+.riskmap .bub-lab { fill: var(--ink-2); font-size: 11px; font-weight: 600; pointer-events: none; }
 
 /* ---------- heat grid ---------- */
 .heat { display: grid; gap: 3px; font-size: 12px; }
@@ -569,39 +725,49 @@ footer {
 /* ---------- motion ---------- */
 @keyframes grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 @keyframes fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes pop { from { opacity: 0; transform: scale(.4); } to { opacity: 1; transform: none; } }
 .stack .seg { animation: grow .55s cubic-bezier(.2,.7,.3,1) both; }
-.tile, .fcard { animation: fade .4s ease both; }
+.tile, .fcard, .crewcard, a.crewchip { animation: fade .4s ease both; }
 .gauge circle.anim { transition: stroke-dashoffset 1s cubic-bezier(.2,.7,.3,1); }
+.riskmap .bub { animation: pop .5s cubic-bezier(.2,.7,.3,1) both; transform-origin: center; }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
-  .stack .seg, .tile, .fcard { animation: none; }
+  .stack .seg, .tile, .fcard, .crewcard, a.crewchip, .riskmap .bub { animation: none; }
   .gauge circle.anim { transition: none; }
-  .tile:hover, .fcard:hover { transform: none; }
+  .tile:hover, .fcard:hover, .crewcard:hover, a.crewchip:hover { transform: none; }
 }
 
 @media (max-width: 900px) {
   .cover-grid { grid-template-columns: 1fr; gap: 34px; }
+  .cover .gauge { justify-self: start; }
   .grid2 { grid-template-columns: 1fr; }
   nav.jump { display: none; }
 }
 @media (max-width: 620px) {
   .wrap { padding: 0 16px 80px; }
+  .cover { padding-inline: 16px; padding-block: 40px 26px; }
   .topbar .inner { padding: 10px 16px; }
   .row { grid-template-columns: 104px 1fr 30px; gap: 10px; }
   .kv { grid-template-columns: 1fr; }
   .find .fid { margin-left: 0; }
+  .crew { grid-template-columns: 1fr 1fr; }
+  .crewrail .rlead { max-width: none; width: 100%; margin-bottom: 2px; }
+  .crewcard .cblurb { display: none; }
 }
 @media print {
   .topbar, .filters, .toggles, .iconbtn { display: none !important; }
-  .cover::before { display: none; }
-  .card, .tile, .fcard, details.feat { box-shadow: none; }
-  details.feat, .fcard, .tile { break-inside: avoid; }
+  /* Atmosphere is for screens: a page of gradient wastes toner and greys the type. */
+  .cover .bg { display: none; }
+  .cover { background: none; margin-inline: 0; padding-inline: 0; }
+  .card, .tile, .fcard, .crewcard, details.feat { box-shadow: none; }
+  details.feat, .fcard, .tile, .crewcard, .riskmap { break-inside: avoid; }
   details.feat > .body { display: block !important; }
 }
 </style>
 </head>
 <body>
 <script id="recon-data" type="application/json">{"project":null,"features":[]}</script>
+<script id="recon-assets" type="application/json">{}</script>
 
 <div class="topbar"><div class="inner" id="topbar"></div></div>
 <div class="wrap" id="app"></div>
@@ -612,6 +778,10 @@ footer {
   "use strict";
 
   var DATA = JSON.parse(document.getElementById("recon-data").textContent || "{}");
+  /* Lens portraits, inlined as data URIs by the build script. Their own island, so `Copy JSON`
+     hands the reader the payload and not a quarter megabyte of base64. Empty when the build ran
+     without the images — every use is guarded. */
+  var ASSETS = JSON.parse(document.getElementById("recon-assets").textContent || "{}");
   var P = DATA.project || null;
   var FEATURES = DATA.features || [];
   var app = document.getElementById("app");
@@ -636,14 +806,34 @@ footer {
   var EFFORT = ["S", "M", "L"];
   var EFFORT_LABEL = { S: "S · <1d", M: "M · 1-3d", L: "L · >3d" };
   var PRIORITY = ["P0", "P1", "P2", "P3"];
-  var LENS_LABEL = { product: "Product", security: "Security", ux: "UI/UX", e2e: "Live browser" };
+  var BUG_TYPE = ["runtime_error", "logic", "data_integrity", "security",
+                  "performance", "ux", "a11y", "regression"];
+  var TYPE_LABEL = { runtime_error: "Runtime error", logic: "Logic", data_integrity: "Data integrity",
+                     security: "Security", performance: "Performance", ux: "UX", a11y: "Accessibility",
+                     regression: "Regression" };
+  var LENS_ORDER = ["product", "security", "ux", "e2e"];
+  /* One row per lens: what it is called, who it is, and what it went looking for. The portrait is
+     what carries lens identity in the UI — never a colour, which is spoken for by severity and
+     magnitude. */
+  var LENS_META = {
+    product: { label: "Product", role: "Product Engineer",
+               blurb: "Reads each feature end to end and owns its maturity rating." },
+    security: { label: "Security", role: "Security Engineer",
+                blurb: "Hunts authz gaps, unscoped queries and input nobody verified." },
+    ux: { label: "UI/UX", role: "UI/UX Engineer",
+          blurb: "Judges the screens a user actually meets — states, focus, labels." },
+    e2e: { label: "Live browser", role: "QA Engineer",
+           blurb: "The only lens that ran the app. Its findings were reproduced, not inferred." }
+  };
+  var LENS_LABEL = {};
+  LENS_ORDER.forEach(function (l) { LENS_LABEL[l] = LENS_META[l].label; });
   var T = P.totals || {};
 
   /* Which review lenses actually contributed, in report order. A single-lens report shows no lens
      UI at all — a chip reading "Product" on every finding is noise when there is nothing to
      contrast it with. */
   var LENSES = (function () {
-    var order = ["product", "security", "ux"], seen = {}, out = [];
+    var order = LENS_ORDER, seen = {}, out = [];
     FEATURES.forEach(function (f) {
       list(f.lenses).concat(f.lens ? [f.lens] : []).forEach(function (l) {
         if (l && !seen[l]) { seen[l] = 1; out.push(l); }
@@ -680,16 +870,60 @@ footer {
     return "d" + Math.max(1, Math.ceil((n / (max || 1)) * 5));
   }
 
+  /* Head-and-shoulders crop of a lens portrait, for anywhere too small to read a whole figure. */
+  function headshot(lens) {
+    var meta = LENS_META[lens] || { label: lens, role: lens };
+    return ASSETS[lens]
+      ? '<span class="head" role="img" aria-label="' + esc(meta.role) +
+        '" style="background-image:url(' + ASSETS[lens] + ')"></span>'
+      : '<span class="head" aria-hidden="true"></span>';
+  }
+
+  /* A lens portrait on its plate, or a monogram when the build shipped without the images. */
+  function portrait(lens, attrs, overlay) {
+    var meta = LENS_META[lens] || { label: lens, role: lens };
+    return '<div class="plate"' + (attrs || "") + ">" + (ASSETS[lens]
+      ? '<img src="' + ASSETS[lens] + '" alt="' + esc(meta.role) + '" loading="lazy">'
+      : '<span class="mono-fallback" aria-hidden="true">' +
+        esc(meta.label.slice(0, 1).toUpperCase()) + "</span>") + (overlay || "") + "</div>";
+  }
+
+  /* Every finding in the report, flattened, each still carrying its kind and its lens. */
+  function allFindings() {
+    var out = [];
+    FEATURES.forEach(function (f) {
+      [["bug", "bugs"], ["gap", "gaps"], ["opp", "opportunities"]].forEach(function (k) {
+        list(f[k[1]]).forEach(function (x) {
+          out.push({ kind: k[0], lens: x.lens || "product", feature: f, x: x });
+        });
+      });
+    });
+    return out;
+  }
+
+  /* Severity weight: the same ranking `severityChart` sorts by, so the two charts never disagree
+     about which feature is worst. */
+  function severityWeight(bs) {
+    return (bs.critical || 0) * 1000 + (bs.high || 0) * 100 +
+           (bs.medium || 0) * 10 + (bs.low || 0);
+  }
+
   /* ---------- topbar ---------- */
+  /* Sections that actually rendered, so the nav never points at one that was skipped. section()
+     appends as it goes, which is why the body is built before the topbar. */
+  var NAV = [["overview", "Overview"]];
+
   function topbar() {
     return '<div class="brand"><span class="glyph">R</span>' +
         "<span>" + esc(P.project_name || "Project") + "</span>" +
         '<span class="sep">/</span><span class="sub">feature recon</span></div>' +
       '<nav class="jump">' +
-        ['<a href="#overview">Overview</a>', '<a href="#findings">Findings</a>',
-         '<a href="#planning">Planning</a>', '<a href="#features">Features</a>'].join("") +
+        NAV.map(function (n) {
+          return '<a href="#' + n[0] + '">' + esc(n[1]) + "</a>";
+        }).join("") +
       "</nav>" +
-      '<button class="iconbtn" id="theme" title="Toggle light / dark" aria-label="Toggle light or dark theme">◐</button>';
+      '<button class="iconbtn" id="theme" title="Toggle light / dark" aria-label="Toggle light or dark theme">◐</button>' +
+      '<div class="progress" id="progress"></div>';
   }
 
   /* ---------- cover ---------- */
@@ -701,21 +935,21 @@ footer {
     var readyPct = Math.round(pct(ready, total));
     var betaPct = Math.round(pct(betaPlus, total));
 
-    var R1 = 78, R2 = 58, C1 = 2 * Math.PI * R1, C2 = 2 * Math.PI * R2;
+    var R1 = 92, R2 = 68, C1 = 2 * Math.PI * R1, C2 = 2 * Math.PI * R2;
     var gauge =
-      '<svg width="188" height="188" viewBox="0 0 188 188" role="img" aria-label="' +
+      '<svg width="220" height="220" viewBox="0 0 220 220" role="img" aria-label="' +
         betaPct + '% of features are beta or better; ' + readyPct + '% are production-ready">' +
-        '<circle class="ring-track" cx="94" cy="94" r="' + R1 + '" stroke-width="13"></circle>' +
-        '<circle class="ring-track" cx="94" cy="94" r="' + R2 + '" stroke-width="13"></circle>' +
-        '<circle class="ring-beta anim" cx="94" cy="94" r="' + R1 + '" stroke-width="13"' +
+        '<circle class="ring-track" cx="110" cy="110" r="' + R1 + '" stroke-width="15"></circle>' +
+        '<circle class="ring-track" cx="110" cy="110" r="' + R2 + '" stroke-width="15"></circle>' +
+        '<circle class="ring-beta anim" cx="110" cy="110" r="' + R1 + '" stroke-width="15"' +
           ' stroke-dasharray="' + C1.toFixed(1) + '" stroke-dashoffset="' + C1.toFixed(1) + '"' +
           ' data-off="' + (C1 * (1 - betaPlus / total)).toFixed(1) + '"></circle>' +
-        '<circle class="ring-prod anim" cx="94" cy="94" r="' + R2 + '" stroke-width="13"' +
+        '<circle class="ring-prod anim" cx="110" cy="110" r="' + R2 + '" stroke-width="15"' +
           ' stroke-dasharray="' + C2.toFixed(1) + '" stroke-dashoffset="' + C2.toFixed(1) + '"' +
           ' data-off="' + (C2 * (1 - ready / total)).toFixed(1) + '"></circle>' +
-        '<text x="94" y="90" text-anchor="middle" class="hero-fig" fill="currentColor">' +
+        '<text x="110" y="105" text-anchor="middle" class="hero-fig" fill="currentColor">' +
           readyPct + '%</text>' +
-        '<text x="94" y="110" text-anchor="middle" class="hero-cap" fill="currentColor">' +
+        '<text x="110" y="126" text-anchor="middle" class="hero-cap" fill="currentColor">' +
           "production-ready</text>" +
       "</svg>" +
       '<div class="gl">' +
@@ -731,7 +965,11 @@ footer {
       return n + list((f.coverage || {}).not_inspected).length;
     }, 0);
 
-    return '<div class="cover" id="overview"><div class="cover-grid"><div>' +
+    /* The e2e lens ran the app, so "static read · no runtime" would be a lie on those reports. */
+    var live = LENSES.indexOf("e2e") >= 0;
+
+    return '<div class="cover" id="overview"><div class="bg" aria-hidden="true"></div>' +
+      '<div class="cover-grid"><div>' +
         '<div class="eyebrow">Feature reconnaissance</div>' +
         "<h1>" + esc(P.project_name || "Untitled project") + "</h1>" +
         '<p class="lede">' + plural(T.features || FEATURES.length, "feature") + " swept, " +
@@ -742,10 +980,12 @@ footer {
           (P.reviewed_at ? '<span class="stamp">Swept <b>' + esc(P.reviewed_at) + "</b></span>" : "") +
           (P.git_commit ? '<span class="stamp">Commit <b class="mono">' + esc(P.git_commit) +
             "</b></span>" : "") +
-          '<span class="stamp">Static read · no runtime</span>' +
+          '<span class="stamp">' + (live ? "Static read + live browser" : "Static read · no runtime") +
+            "</span>" +
           (blind ? '<span class="stamp"><b>' + blind + "</b> areas not inspected</span>" : "") +
         "</div>" +
       '</div><div class="gauge">' + gauge + "</div></div>" +
+      crewRail() +
       '<div class="notice"><b>This is reconnaissance, not ground truth.</b> ' +
         "Findings come from reading the code, not running it — so nothing here depends on a test " +
         "passing, and anything the sweep could not read is listed per feature under " +
@@ -753,9 +993,124 @@ footer {
       "</div>";
   }
 
-  function section(id, title, cap, body) {
-    return '<section class="sec" id="' + id + '"><header class="sh"><h2>' + title + "</h2>" +
+  /* The line-up along the bottom of the hero: who reviewed this, and how much each one filed. */
+  function crewRail() {
+    var counts = findingsByLens();
+    return '<div class="crewrail">' +
+      '<div class="rlead">Reviewed by</div>' +
+      LENSES.map(function (l, i) {
+        var meta = LENS_META[l] || { label: l, role: l };
+        var n = counts[l] ? counts[l].total : 0;
+        return '<a class="crewchip" href="#crew" style="animation-delay:' + (i * 70) + 'ms"' +
+          tip(meta.role + " — " + plural(n, "finding")) + ">" + headshot(l) +
+          '<span><span class="cn">' + esc(meta.label) + '</span><br>' +
+          '<span class="cc">' + plural(n, "finding") + "</span></span></a>";
+      }).join("") + "</div>";
+  }
+
+  /* Findings grouped by the lens that filed them, with the severity split each one contributed. */
+  function findingsByLens() {
+    var by = {};
+    allFindings().forEach(function (f) {
+      var b = by[f.lens] || (by[f.lens] = { total: 0, bug: 0, gap: 0, opp: 0, sev: {},
+                                            features: {} });
+      b.total++;
+      b[f.kind]++;
+      b.features[f.feature.slug] = 1;
+      if (f.kind === "bug") {
+        var s = f.x.severity || "medium";
+        b.sev[s] = (b.sev[s] || 0) + 1;
+      }
+    });
+    return by;
+  }
+
+  /* Section index, so the report scans as a numbered document. Bumped by section() itself. */
+  var secNo = 0;
+
+  function section(id, title, cap, body, navLabel) {
+    secNo++;
+    if (navLabel) NAV.push([id, navLabel]);
+    return '<section class="sec" id="' + id + '"><header class="sh">' +
+      '<span class="ix">' + (secNo < 10 ? "0" : "") + secNo + "</span>" +
+      "<h2>" + title + "</h2>" +
       (cap ? '<div class="cap">' + cap + "</div>" : "") + "</header>" + body + "</section>";
+  }
+
+  /* ---------- the review crew ----------
+     Who read this codebase, and what each of them came back with. A single-lens sweep still gets
+     its card — one portrait is a face on the report, not noise — but the contribution chart needs
+     something to compare against, so it waits for a second lens. */
+  function crew() {
+    var by = findingsByLens();
+
+    var cards = LENSES.map(function (l, i) {
+      var meta = LENS_META[l] || { label: l, role: l, blurb: "" };
+      var b = by[l] || { total: 0, bug: 0, gap: 0, opp: 0, sev: {}, features: {} };
+      var seen = Object.keys(b.features).length;
+      var sevBar = SEVERITY.map(function (s) {
+        var n = b.sev[s] || 0;
+        return n ? '<i style="width:' + pct(n, b.bug).toFixed(2) +
+          "%;background:var(--sev-" + s + ')"></i>' : "";
+      }).join("");
+      return '<div class="crewcard" style="animation-delay:' + (i * 70) + 'ms">' +
+        portrait(l, tip(meta.role + " — " + meta.blurb),
+          '<div class="badge"><span class="lens-label">' + esc(meta.label) + "</span></div>") +
+        '<div class="cbody">' +
+          '<div class="crole">' + esc(meta.role) + "</div>" +
+          '<div class="cblurb">' + esc(meta.blurb) + "</div>" +
+          (b.bug ? '<div class="bar" style="height:6px;display:flex;border-radius:0 4px 4px 0;' +
+            'background:var(--wash)"' + tip(plural(b.bug, "bug") + " — " +
+              SEVERITY.filter(function (s) { return b.sev[s]; }).map(function (s) {
+                return b.sev[s] + " " + s;
+              }).join(", ")) + ">" + sevBar + "</div>" : "") +
+          '<div class="cstats">' +
+            "<span><b>" + seen + "</b> " + (seen === 1 ? "feature" : "features") + "</span>" +
+            "<span><b>" + b.bug + "</b> bugs</span>" +
+            "<span><b>" + b.gap + "</b> gaps</span>" +
+            "<span><b>" + b.opp + "</b> opps</span>" +
+          "</div>" +
+        "</div></div>";
+    }).join("");
+
+    var chart = "";
+    if (MULTI_LENS) {
+      var max = Math.max.apply(null, LENSES.map(function (l) {
+        return by[l] ? by[l].total : 0;
+      }).concat([1]));
+      var rows = LENSES.map(function (l, i) {
+        var b = by[l] || { total: 0, bug: 0, gap: 0, opp: 0 };
+        var segs = ["bug", "gap", "opp"].map(function (k) {
+          var n = b[k] || 0;
+          if (!n) return "";
+          return '<div class="seg" style="width:' + pct(n, b.total).toFixed(3) +
+            "%;background:var(--kind-" + k + ");color:#fff;animation-delay:" + (i * 40) + 'ms"' +
+            tip((LENS_META[l] || {}).label + " — " + plural(n, KIND_LABEL[k].toLowerCase())) +
+            ">" + (pct(n, max) >= 7 ? n : "") + "</div>";
+        }).join("");
+        return '<div class="row"><div class="rlabel">' + esc((LENS_META[l] || {}).label || l) +
+          '</div><div class="track"><div class="stack" style="width:' +
+          pct(b.total, max).toFixed(3) + '%">' + segs + "</div></div>" +
+          '<div class="rval">' + (b.total || "—") + "</div></div>";
+      }).join("");
+      var legend = ["bug", "gap", "opp"].map(function (k) {
+        return '<span class="key"><i class="sw" style="background:var(--kind-' + k + ')"></i>' +
+          KIND_PLURAL[k] + "</span>";
+      }).join("");
+      chart = '<div class="card" style="margin-top:18px">' +
+        '<h3 style="font-size:14px;margin-bottom:14px">What each lens filed</h3>' +
+        '<div class="rows">' + rows + "</div>" +
+        '<div class="legend">' + legend + "</div>" +
+        '<div class="axis-note">Bar length is total findings (longest ' + max +
+        "). Lenses overlap by design — a defect the product lens missed and the security lens " +
+        "caught is one finding, filed once, by whoever saw it. Duplicates were removed before " +
+        "this report was built, so nothing here is double-counted.</div></div>";
+    }
+
+    return section("crew", "The review crew",
+      plural(LENSES.length, "lens", "lenses") + " · " +
+        plural(allFindings().length, "finding") + " filed",
+      '<div class="crew">' + cards + "</div>" + chart, "Crew");
   }
 
   /* ---------- maturity band ---------- */
@@ -788,29 +1143,42 @@ footer {
     var broken = FEATURES.reduce(function (n, f) {
       return n + ((f.counts || {}).flows_broken || 0);
     }, 0);
+    var nFeat = T.features || FEATURES.length || 1;
+    var flows = FEATURES.reduce(function (n, f) { return n + list(f.user_flows).length; }, 0);
+    /* Each tile's meter is a share of the population that tile counts against — bugs against all
+       bugs, features against all features — named in `of` so the bar is never a bare mystery. */
     var items = [
-      { v: sev.critical || 0, l: "Critical bugs", c: "--sev-critical",
+      { v: sev.critical || 0, l: "Critical bugs", c: "--sev-critical", of: T.bugs || 0,
+        ofl: "of all bugs",
         sub: sev.critical ? "data loss, security, or a dead primary flow" : "none found" },
-      { v: sev.high || 0, l: "High bugs", c: "--sev-high",
+      { v: sev.high || 0, l: "High bugs", c: "--sev-high", of: T.bugs || 0, ofl: "of all bugs",
         sub: (sev.medium || 0) + " medium · " + (sev.low || 0) + " low" },
-      { v: broken, l: "Flows that don't complete", c: "--sev-medium",
-        sub: "broken or never implemented" },
+      { v: broken, l: "Flows that don't complete", c: "--sev-medium", of: flows,
+        ofl: "of all flows", sub: "broken or never implemented" },
       { v: noTests.length, l: "Features without tests", c: noTests.length ? "--sev-high" : "--st-good",
+        of: nFeat, ofl: "of all features",
         sub: noTests.length ? noTests.slice(0, 3).join(", ") +
           (noTests.length > 3 ? " +" + (noTests.length - 3) + " more" : "")
           : "every feature has tests" },
-      { v: lowConf.length, l: "Low-confidence reads", c: "--muted",
+      { v: lowConf.length, l: "Low-confidence reads", c: "--muted", of: nFeat,
+        ofl: "of all features",
         sub: lowConf.length ? "inferred from partial reading" : "all features read directly" }
     ];
-    return '<section class="sec" id="findings"><header class="sh"><h2>Headline numbers</h2>' +
-      '<div class="cap">' + (T.bugs || 0) + " bugs · " + (T.gaps || 0) + " gaps · " +
-      (T.opportunities || 0) + ' opportunities</div></header><div class="tiles">' +
+    return section("findings", "Headline numbers",
+      (T.bugs || 0) + " bugs · " + (T.gaps || 0) + " gaps · " +
+      (T.opportunities || 0) + " opportunities",
+      '<div class="tiles">' +
       items.map(function (i, n) {
+        var p = pct(i.v, i.of);
         return '<div class="tile" style="--tc:var(' + i.c + ');animation-delay:' + (n * 55) + 'ms">' +
           '<div class="v num">' + i.v + "</div>" +
           '<div class="l"><i class="dot" style="background:var(' + i.c + ')"></i>' + i.l + "</div>" +
-          '<div class="sub">' + esc(i.sub) + "</div></div>";
-      }).join("") + "</div></section>";
+          '<div class="sub">' + esc(i.sub) + "</div>" +
+          (i.of ? '<div class="meter"' + tip(Math.round(p) + "% " + i.ofl +
+            " (" + i.v + " of " + i.of + ")") + '><i style="width:' +
+            (i.v ? Math.max(1.5, p).toFixed(1) : 0) + '%"></i></div>' : "") +
+          "</div>";
+      }).join("") + "</div>", "Findings");
   }
 
   /* ---------- verdict ---------- */
@@ -820,6 +1188,245 @@ footer {
       '<div class="card"><div class="verdict">' +
       esc(P.summary).split(/\n\s*\n/).map(function (p) { return "<p>" + p + "</p>"; }).join("") +
       "</div></div>");
+  }
+
+  /* ---------- risk map ----------
+     Maturity across, severity weight up, area = findings. Two encodings that already exist in the
+     report, crossed — which is the whole point: the feature sitting top-left is immature AND
+     dangerous, and no single bar chart puts those two facts in the same place. */
+  function riskMap() {
+    var pts = FEATURES.map(function (f) {
+      var c = f.counts || {}, bs = c.bugs_by_severity || {};
+      return { f: f, name: f.name || f.slug, slug: f.slug,
+               mi: Math.max(0, MATURITY.indexOf(f.maturity)),
+               w: severityWeight(bs), bugs: c.bugs || 0,
+               all: (c.bugs || 0) + (c.gaps || 0) + (c.opportunities || 0), bs: bs };
+    });
+    if (!pts.some(function (p) { return p.w; })) return "";
+
+    var W = 900, H = 396, ML = 84, MR = 26, MT = 26, MB = 60;
+    var iw = W - ML - MR, ih = H - MT - MB;
+    /* sqrt on the weight: one critical bug is 1000 and would otherwise flatten everything else
+       onto the floor. The gridlines below anchor that scale to something nameable. */
+    var maxW = Math.max.apply(null, pts.map(function (p) { return p.w; }).concat([1]));
+    var maxY = Math.sqrt(maxW);
+    var maxR = Math.max.apply(null, pts.map(function (p) { return p.all; }).concat([1]));
+    var band = iw / MATURITY.length;
+    var RMAX = 22;
+    /* Reserve a bubble's worth of headroom, or the tallest one is drawn half outside the plot. */
+    var top = MT + RMAX + 8, plot = MT + ih - top;
+    var y = function (w) { return MT + ih - (Math.sqrt(w) / maxY) * plot; };
+    var r = function (n) { return Math.max(5, Math.sqrt(n / maxR) * RMAX); };
+
+    /* Features sharing a maturity would otherwise stack on one vertical line and overlap. Spread
+       them evenly across their band instead — deterministic, so the chart is stable between
+       builds, and the band is still what the x position means. */
+    var lanes = {};
+    pts.forEach(function (p) { (lanes[p.mi] || (lanes[p.mi] = [])).push(p); });
+    Object.keys(lanes).forEach(function (mi) {
+      var group = lanes[mi].sort(function (a, b) { return b.w - a.w || (a.slug < b.slug ? -1 : 1); });
+      group.forEach(function (p, k) {
+        p.cx = ML + band * (+mi + (group.length === 1 ? 0.5 : 0.12 + 0.76 * (k / (group.length - 1))));
+        p.cy = y(p.w);
+        p.r = r(p.all);
+      });
+    });
+
+    /* One bug of each severity, as a height. An abstract weight axis needs something nameable on
+       it or the reader has no idea what "high" looks like. */
+    /* Ticks run top-down, so y grows as the weight falls. The sqrt scale crowds the low end; a
+       tick whose label would land on the previous one is dropped rather than overprinted. */
+    var lastTick = -Infinity;
+    var ticks = [[1000, "1 critical"], [100, "1 high"], [10, "1 medium"], [1, "1 low"]]
+      .filter(function (t) {
+        if (t[0] > maxW || y(t[0]) - lastTick < 15) return false;
+        lastTick = y(t[0]);
+        return true;
+      })
+      .map(function (t) {
+        return '<line class="axis" x1="' + ML + '" y1="' + y(t[0]).toFixed(1) + '" x2="' +
+          (ML + iw) + '" y2="' + y(t[0]).toFixed(1) + '" stroke-dasharray="2 4"></line>' +
+          '<text class="axis-lab" text-anchor="end" x="' + (ML - 8) + '" y="' +
+          (y(t[0]) + 4).toFixed(1) + '">' + t[1] + "</text>";
+      }).join("");
+
+    /* Greedy label placement: worst first, and anything whose box would land on an already-placed
+       one is left to its tooltip. A thicket of overlapping names is worse than fewer names. */
+    var placed = [];
+    var labelFor = function (p) {
+      var w = p.name.length * 6.2, lx = p.cx, ly = p.cy - p.r - 7;
+      if (ly < 12) ly = p.cy + p.r + 14;                   /* would clip the top: drop it below */
+      var box = { x1: lx - w / 2, x2: lx + w / 2, y1: ly - 11, y2: ly + 4 };
+      var hit = placed.some(function (b) {
+        return box.x1 < b.x2 && box.x2 > b.x1 && box.y1 < b.y2 && box.y2 > b.y1;
+      });
+      if (hit) return "";
+      placed.push(box);
+      return '<text class="bub-lab" text-anchor="middle" x="' + lx.toFixed(1) + '" y="' +
+        ly.toFixed(1) + '">' + esc(p.name) + "</text>";
+    };
+    var labels = pts.filter(function (p) { return p.all; })
+                    .sort(function (a, b) { return b.w - a.w; })
+                    .slice(0, 7).map(labelFor).join("");
+
+    var betaAt = MATURITY.indexOf("beta");
+    var svg = '<svg class="riskmap" viewBox="0 0 ' + W + " " + H +
+      '" preserveAspectRatio="xMidYMid meet" role="img" aria-label="' +
+      "Features plotted by maturity and severity weight; the sortable data table under Features " +
+      "carries the same numbers" + '">' +
+      '<rect class="quad" x="' + ML + '" y="' + MT + '" width="' + (band * betaAt).toFixed(1) +
+        '" height="' + ih + '" rx="8"></rect>' +
+      /* Under the axis: the only place a bubble or a gridline can never land on it. */
+      '<text class="quad-lab" text-anchor="middle" x="' + (ML + band * betaAt / 2).toFixed(1) +
+        '" y="' + (MT + ih + 42) + '">Below beta — immature and dangerous</text>' +
+      ticks +
+      '<line class="axis" x1="' + ML + '" y1="' + (MT + ih) + '" x2="' + (ML + iw) +
+        '" y2="' + (MT + ih) + '"></line>' +
+      '<line class="axis" x1="' + ML + '" y1="' + MT + '" x2="' + ML + '" y2="' + (MT + ih) +
+        '"></line>' +
+      MATURITY.map(function (m, i) {
+        return '<text class="axis-lab" text-anchor="middle" x="' +
+          (ML + band * (i + 0.5)).toFixed(1) + '" y="' + (MT + ih + 22) + '">' +
+          esc(MAT_LABEL[m]) + "</text>";
+      }).join("") +
+      pts.filter(function (p) { return p.all; })
+         .sort(function (a, b) { return b.all - a.all; })   /* big behind, small in front */
+         .map(function (p, i) {
+        return '<circle class="bub" cx="' + p.cx.toFixed(1) + '" cy="' + p.cy.toFixed(1) +
+          '" r="' + p.r.toFixed(1) + '" data-goto="' + esc(p.slug) +
+          '" style="animation-delay:' + (i * 35) + 'ms"' +
+          tip(p.name + " — " + (MAT_LABEL[p.f.maturity] || p.f.maturity) + " · " +
+              plural(p.bugs, "bug") +
+              (p.bugs ? " (" + SEVERITY.filter(function (s) { return p.bs[s]; })
+                .map(function (s) { return p.bs[s] + " " + s; }).join(", ") + ")" : "") +
+              " · " + plural(p.all, "finding") + " in total") + "></circle>";
+      }).join("") + labels +
+      "</svg>";
+
+    return section("risk", "Risk map", "maturity × severity · area is total findings",
+      '<div class="card">' + svg +
+      '<div class="axis-note">Each bubble is a feature. Left to right is maturity, the same order ' +
+      "as the maturity mix. Up is severity weight — critical×1000, high×100, medium×10, low×1, " +
+      "the same ranking Bugs by feature sorts on — plotted on a square-root scale so one critical " +
+      "bug does not flatten everything else onto the floor, with the dashed lines marking where a " +
+      "feature carrying exactly one bug of that severity would sit. Area is total findings, and " +
+      "features sharing a maturity are spread across their band rather than stacked on one line. " +
+      "The shaded band is everything below beta: a bubble high and to the left is a feature that " +
+      "is both unfinished and already dangerous. Click one to open its full read.</div></div>",
+      "Risk");
+  }
+
+  /* ---------- user-flow health ---------- */
+  function flowHealth() {
+    var withFlows = FEATURES.filter(function (f) { return list(f.user_flows).length; });
+    if (!withFlows.length) return "";
+    var STATUS = ["working", "partial", "broken", "not_implemented"];
+
+    var tally = function (fs) {
+      var t = { working: 0, partial: 0, broken: 0, not_implemented: 0, total: 0 };
+      fs.forEach(function (fl) {
+        var s = STATUS.indexOf(fl.status) >= 0 ? fl.status : "not_implemented";
+        t[s]++; t.total++;
+      });
+      return t;
+    };
+    var all = tally(withFlows.reduce(function (a, f) { return a.concat(list(f.user_flows)); }, []));
+
+    var band = function (t, delay, name) {
+      return STATUS.map(function (s, i) {
+        var n = t[s], p = pct(n, t.total);
+        return '<div class="seg f-' + s + (n ? "" : " z") + '" style="width:' + p.toFixed(3) +
+          "%;animation-delay:" + (delay + i * 40) + 'ms"' +
+          tip((name ? name + " — " : "") + FLOW_LABEL[s] + ": " + plural(n, "flow") +
+              " (" + Math.round(p) + "%)") + ">" + (p >= 9 ? n : "") + "</div>";
+      }).join("");
+    };
+
+    var max = Math.max.apply(null, withFlows.map(function (f) {
+      return list(f.user_flows).length;
+    }).concat([1]));
+    var rows = withFlows.map(function (f, i) {
+      var t = tally(list(f.user_flows));
+      return '<a class="row" href="#' + esc(f.slug) + '"><div class="rlabel">' +
+        esc(f.name || f.slug) + '</div><div class="track"><div class="stack" style="width:' +
+        pct(t.total, max).toFixed(3) + '%">' + band(t, i * 20, f.name || f.slug) +
+        "</div></div>" + '<div class="rval">' + t.total + "</div></a>";
+    }).join("");
+
+    var legend = STATUS.map(function (s) {
+      return '<span class="key' + (all[s] ? "" : " off") +
+        '"><i class="sw" style="background:var(' +
+        ({ working: "--st-good", partial: "--st-warning", broken: "--st-critical",
+           not_implemented: "--muted" })[s] + ')"></i>' + FLOW_LABEL[s] +
+        ' <span class="num">' + all[s] + "</span></span>";
+    }).join("");
+
+    var bad = all.broken + all.not_implemented;
+    return section("flows", "User-flow health",
+      plural(all.total, "flow") + " across " + plural(withFlows.length, "feature"),
+      '<div class="card band"><div class="stack">' + band(all, 0) + "</div>" +
+      '<div class="legend">' + legend + "</div>" +
+      '<div class="rows" style="margin-top:20px">' + rows + "</div>" +
+      '<div class="axis-note">A flow is one thing a user is trying to get done. ' +
+      (bad
+        ? "<b>" + plural(bad, "flow") + "</b> do not complete — " + all.broken +
+          " break partway and " + all.not_implemented + " were never built. "
+        : "Every flow completes. ") +
+      "Row length is the number of flows the feature declares, so a short row means little was " +
+      "mapped there rather than little is wrong. Click a row to open that feature.</div></div>");
+  }
+
+  /* ---------- bug types ---------- */
+  function bugTypes() {
+    var bugs = [];
+    FEATURES.forEach(function (f) { list(f.bugs).forEach(function (b) { bugs.push(b); }); });
+    if (!bugs.length) return "";
+
+    var by = {};
+    bugs.forEach(function (b) {
+      var t = BUG_TYPE.indexOf(b.type) >= 0 ? b.type : "other";
+      var e = by[t] || (by[t] = { total: 0, sev: {} });
+      e.total++;
+      var s = SEVERITY.indexOf(b.severity) >= 0 ? b.severity : "medium";
+      e.sev[s] = (e.sev[s] || 0) + 1;
+    });
+    /* "other" always sorts last — it is a leftover bucket, not a finding type that beat the rest. */
+    var keys = Object.keys(by).sort(function (a, b) {
+      if (a === "other") return 1;
+      if (b === "other") return -1;
+      return by[b].total - by[a].total;
+    });
+    var max = Math.max.apply(null, keys.map(function (k) { return by[k].total; }).concat([1]));
+
+    var rows = keys.map(function (k, i) {
+      var e = by[k];
+      var segs = SEVERITY.map(function (s) {
+        var n = e.sev[s] || 0;
+        if (!n) return "";
+        return '<div class="seg" style="width:' + pct(n, e.total).toFixed(3) +
+          "%;background:var(--sev-" + s + ");animation-delay:" + (i * 30) + 'ms"' +
+          tip((TYPE_LABEL[k] || "Other") + " — " + plural(n, SEV_LABEL[s].toLowerCase() + " bug")) +
+          "></div>";
+      }).join("");
+      return '<div class="row"><div class="rlabel">' + esc(TYPE_LABEL[k] || "Other") +
+        '</div><div class="track"><div class="stack" style="width:' +
+        pct(e.total, max).toFixed(3) + '%">' + segs + "</div></div>" +
+        '<div class="rval">' + e.total + "</div></div>";
+    }).join("");
+
+    var legend = SEVERITY.map(function (s) {
+      return '<span class="key"><i class="sw" style="background:var(--sev-' + s + ')"></i>' +
+        SEV_LABEL[s] + "</span>";
+    }).join("");
+
+    var top = TYPE_LABEL[keys[0]] || "Other";
+    return section("types", "What kind of broken", "bug type × severity",
+      '<div class="card"><div class="rows">' + rows + "</div>" +
+      '<div class="legend">' + legend + "</div>" +
+      '<div class="axis-note">The same ' + bugs.length + " bugs as the chart above, cut by what " +
+      "sort of defect they are rather than where they live. <b>" + esc(top) + "</b> leads with " +
+      by[keys[0]].total + ". A tall single category usually points at one habit repeated across " +
+      "the codebase — check Cross-cutting before filing them one at a time.</div></div>");
   }
 
   /* ---------- bugs by feature ---------- */
@@ -915,7 +1522,7 @@ footer {
       '<div class="grid2"><div class="card"><h3 style="font-size:14px;margin-bottom:14px">' +
       "Bugs · severity × effort</h3>" + left + "</div>" +
       '<div class="card"><h3 style="font-size:14px;margin-bottom:14px">' +
-      "Gaps &amp; opportunities · priority × effort</h3>" + right + "</div></div>");
+      "Gaps &amp; opportunities · priority × effort</h3>" + right + "</div></div>", "Planning");
   }
 
   /* ---------- dependency matrix ---------- */
@@ -1044,7 +1651,7 @@ footer {
 
     return section("features", "Features", "click a card to open its full read",
       '<div class="fgrid">' + cards + "</div>" +
-      '<div style="margin-top:18px">' + dataTable() + "</div>");
+      '<div style="margin-top:18px">' + dataTable() + "</div>", "Features");
   }
 
   /* ---------- data table (the non-visual view) ---------- */
@@ -1243,15 +1850,21 @@ footer {
 
   /* ---------- assemble ---------- */
   function render() {
-    bar.innerHTML = topbar();
-    app.innerHTML = cover() + maturityBand() + tiles() + verdict() + severityChart() +
+    /* Body first: section() is what populates NAV, so the topbar has to be built after it. */
+    var live = LENSES.indexOf("e2e") >= 0;
+    app.innerHTML = cover() + crew() + maturityBand() + tiles() + verdict() + riskMap() +
+      severityChart() + bugTypes() + flowHealth() +
       planning() + dependencies() + crossCutting() + priorities() + featureGrid() +
       section("detail", "Every finding", "filter, then read", filters() +
         FEATURES.map(featureCard).join("")) +
       "<footer><span>Generated by <b>feature-recon</b> from " +
         (T.features || FEATURES.length) + " feature state files</span>" +
         "<span>Schema " + esc(P.schema_version || "1.0") + "</span>" +
-        "<span>Static read-only sweep — no runtime, no database, no tests executed</span></footer>";
+        "<span>" + (live
+          ? "Static read plus a live browser run — no database written, no application code changed"
+          : "Static read-only sweep — no runtime, no database, no tests executed") +
+        "</span></footer>";
+    bar.innerHTML = topbar();
     wire();
   }
 
@@ -1409,6 +2022,16 @@ footer {
       var cur = document.documentElement.getAttribute("data-theme") || (dark ? "dark" : "light");
       setTheme(cur === "dark" ? "light" : "dark");
     });
+
+    /* Read position. One passive listener, one width write — cheap enough to leave always on. */
+    var prog = document.getElementById("progress");
+    var onScroll = function () {
+      var max = document.documentElement.scrollHeight - window.innerHeight;
+      prog.style.width = (max > 0 ? Math.min(100, (window.scrollY / max) * 100) : 0) + "%";
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll, { passive: true });
+    onScroll();
 
     /* Rings animate from empty to their share once laid out. */
     requestAnimationFrame(function () {

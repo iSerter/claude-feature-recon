@@ -269,6 +269,13 @@ PY
   grep -q '"lens":"e2e"' "$h" || fail "the live-browser lens is missing from the report payload"
   echo "PASS per-lens files merge (billing ×4, auth fallback, lens attribution in the payload)"
 
+  # The lens portraits are inlined so the report stays one file that opens from any path. The
+  # byte-parity diff above already proves both runtimes base64 them identically; this catches a
+  # silent regression to an empty island, which the diff would happily call a match.
+  grep -q '"e2e":"data:image/jpeg;base64,' "$h" || fail "lens portraits are not inlined"
+  ! grep -q base64 "$tmp/py/project.json" || fail "base64 leaked into project.json"
+  echo "PASS lens portraits inline as data URIs, and stay out of project.json"
+
   # A report must rebuild identically from its own rewritten project.json (idempotence), and
   # the other runtime must accept what this one wrote.
   cp "$tmp/py/recon-report.html" "$tmp/first.html"

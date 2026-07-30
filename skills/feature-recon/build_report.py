@@ -15,6 +15,7 @@ and byte-identical output; build_report.sh picks whichever runtime the machine h
 """
 
 import argparse
+import base64
 import json
 import sys
 import tempfile
@@ -42,6 +43,7 @@ FEATURE_KEYS = ["slug", "name", "maturity", "confidence", "state_summary", "surf
                 "dependencies", "open_questions"]
 
 PLACEHOLDER = '<script id="recon-data" type="application/json">'
+ASSET_PLACEHOLDER = '<script id="recon-assets" type="application/json">'
 
 
 class Problems:
@@ -361,13 +363,45 @@ def order_features(project, features):
     return sorted(features, key=lambda f: (rank.get(f.get("slug"), len(rank)), f.get("slug") or ""))
 
 
-def render(template, payload):
-    if PLACEHOLDER not in template:
-        raise SystemExit(f"template is missing the {PLACEHOLDER!r} data slot")
-    blob = json.dumps(payload, separators=(",", ":")).replace("</", r"<\/")
-    head, rest = template.split(PLACEHOLDER, 1)
+def load_assets(template_path):
+    """The lens portraits, base64'd into `data:` URIs, keyed by lens.
+
+    Looked for in `assets/` beside the template, so `--template /tmp/mine.html` can ship its own
+    art, falling back to the one beside this script. Iterating LENS rather than listing the
+    directory is what makes the key order identical in both runtimes.
+
+    A missing file is skipped and a missing directory yields `{}` — the dashboard falls back to a
+    monogram, so an install without the images still builds.
+    """
+    roots = [Path(template_path).parent / "assets", Path(__file__).parent / "assets"]
+    assets = {}
+    for lens in LENS:
+        for root in roots:
+            image = root / f"lens-{lens}.jpg"
+            try:
+                raw = image.read_bytes()
+            except OSError:
+                continue
+            assets[lens] = "data:image/jpeg;base64," + base64.b64encode(raw).decode("ascii")
+            break
+    return assets
+
+
+def fill_slot(template, placeholder, value, what):
+    """Replace the contents of one `<script>` data island, leaving the rest of the file alone."""
+    if placeholder not in template:
+        raise SystemExit(f"template is missing the {placeholder!r} {what} slot")
+    blob = json.dumps(value, separators=(",", ":")).replace("</", r"<\/")
+    head, rest = template.split(placeholder, 1)
     _, tail = rest.split("</script>", 1)
-    return f"{head}{PLACEHOLDER}{blob}</script>{tail}"
+    return f"{head}{placeholder}{blob}</script>{tail}"
+
+
+def render(template, payload, assets):
+    # Assets ride in their own island: `Copy JSON` hands the reader `payload`, and a quarter of a
+    # megabyte of base64 in the clipboard would make that button useless.
+    return fill_slot(fill_slot(template, PLACEHOLDER, payload, "data"),
+                     ASSET_PLACEHOLDER, assets, "asset")
 
 
 def build(recon_dir, out_path=None, template_path=None):
@@ -422,7 +456,8 @@ def build(recon_dir, out_path=None, template_path=None):
     template_path = Path(template_path or Path(__file__).parent / "template.html")
     out_path = Path(out_path or recon_dir / "recon-report.html")
     out_path.write_text(render(template_path.read_text(),
-                               {"project": project, "features": features}))
+                               {"project": project, "features": features},
+                               load_assets(template_path)))
     return out_path, project
 
 
@@ -540,6 +575,14 @@ def selftest():
         assert payload["project"]["project_name"] == "Fixture"
         assert [f["slug"] for f in payload["features"]] == ["alpha", "beta"]
         assert "Fixture" in html
+
+        # The lens portraits are inlined, and they stay out of the payload the Copy JSON button
+        # hands the reader.
+        asset_start = html.index(ASSET_PLACEHOLDER) + len(ASSET_PLACEHOLDER)
+        assets = json.loads(html[asset_start:html.index("</script>", asset_start)])
+        assert list(assets) == LENS, list(assets)
+        assert all(v.startswith("data:image/jpeg;base64,") for v in assets.values()), assets
+        assert "base64" not in json.dumps(payload)
 
         # the two alpha lens files merged into one feature, product lens first and in charge
         alpha = payload["features"][0]
