@@ -19,15 +19,23 @@ nothing to install) and `git` for the commit stamp.
 
 ## Use
 
+Two commands: one surveys, one turns the survey into work.
+
 ```
 /feature-recon                          # discover features, confirm the list, sweep everything
 /feature-recon brands,campaigns,billing # sweep exactly these
 /feature-recon --dir docs/state         # write somewhere other than docs/recon
 /feature-recon --sequential             # no subagent fan-out, one feature at a time
+
+/feature-tasks                          # task files for critical+high bugs and P0/P1 gaps
+/feature-tasks --severity critical      # only the critical ones
+/feature-tasks --feature billing        # only one feature
+/feature-tasks --ids billing-bug-01,xc-02
+/feature-tasks --out tasks/q3           # write somewhere other than tasks/
 ```
 
-The skill also triggers on plain requests like "review the state of this project", "which features
-are untested", or "build me a project state dashboard".
+Both also trigger on plain requests — "review the state of this project", "which features are
+untested", "turn the recon findings into tasks", "what should we fix first".
 
 ## What you get
 
@@ -40,6 +48,17 @@ docs/recon/
 
 Each finding carries a stable id (`billing-bug-01`), an effort estimate, and the evidence it came
 from, so consecutive runs diff cleanly in git and findings can be referenced in tickets.
+
+Then `/feature-tasks` turns those findings into work:
+
+```
+tasks/
+  00-index.md               ordered fix set, dependencies, what's cut, shared conventions
+  01-{slug}.md              one task per root cause
+```
+
+Each task carries the finding ids it closes, the mechanism, cited `path:line` evidence, a
+choke-point fix plan, named test cases, and the steps to update the report when it merges.
 
 ## How it works
 
@@ -95,11 +114,14 @@ lines (unknown enum values, missing evidence, duplicate ids) are advisory.
 
 | Path | What it is |
 |---|---|
-| `skills/feature-recon/SKILL.md` | the procedure Claude follows |
+| `skills/feature-recon/SKILL.md` | the sweep procedure Claude follows |
 | `skills/feature-recon/reference/report-spec.md` | the JSON contract, handed to each subagent |
 | `skills/feature-recon/build_report.py` | validate + derive counts + render (stdlib only) |
 | `skills/feature-recon/template.html` | the dashboard template |
-| `commands/feature-recon.md` | the `/feature-recon` entry point |
+| `skills/feature-tasks/SKILL.md` | the findings → tasks procedure |
+| `skills/feature-tasks/templates/task.md` | one task file's shape |
+| `skills/feature-tasks/templates/index.md` | the fix-set index's shape |
+| `commands/feature-recon.md`, `commands/feature-tasks.md` | the two slash-command entry points |
 
 ## Limits
 

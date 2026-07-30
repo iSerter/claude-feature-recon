@@ -8,7 +8,7 @@
   "plugins": [
     {
       "name": "feature-recon",
-      "description": "Reconnaissance sweep of any codebase, feature by feature: what works, what's broken, what's missing, what's untested. Emits one evidence-cited JSON state file per feature plus a rollup, then renders a self-contained HTML dashboard from them.",
+      "description": "Reconnaissance sweep of any codebase, feature by feature: what works, what's broken, what's missing, what's untested. Emits one evidence-cited JSON state file per feature plus a rollup, renders a self-contained HTML dashboard, and turns the findings into ordered task files that update the report as fixes land.",
       "author": {
         "name": "Ilyas Serter"
       },

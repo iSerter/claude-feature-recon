@@ -192,7 +192,19 @@ always match what is on disk.
 - `top_findings` — max 10, ranked by severity × blast radius, referencing finding IDs that exist.
 - `recommended_sequence` — max 10 steps, ordered so each step unblocks the next.
 
-## 5. Rules of engagement
+## 5. Keeping the report current as fixes land
+
+Findings have no `status` field on purpose. When a finding is fixed, **delete it** from its feature
+file and re-run `build_report.py`, which re-derives every `counts` and `totals` value from the
+feature files — never hand-edit those. Then prune the finding's id from `project.json`'s
+`top_findings` and `recommended_sequence`, and from any `cross_cutting[].affects` it no longer
+applies to.
+
+A `status: fixed` marker would not survive the next sweep (a sweep rewrites the feature files), so
+`git log` on the report directory is the record of what was closed and when. Stable finding ids are
+what make that history readable. The `feature-tasks` skill writes this loop into every task file.
+
+## 6. Rules of engagement
 
 - **Read-only.** Do not fix anything you find; this produces the report only.
 - Valid JSON. No comments, no trailing commas. Every file must parse.

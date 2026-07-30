@@ -96,7 +96,8 @@ Stdlib only, no install step. It validates, derives all counts, and writes
 ### 8. Report
 
 Give the user the output paths and a 3–5 line verdict. Do not open the HTML for them, and do not
-start fixing what you found unless they ask.
+start fixing what you found unless they ask. Mention that `/feature-tasks` turns these findings into
+ordered task files if they want to act on them.
 
 ## Rules
 
