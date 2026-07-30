@@ -35,7 +35,17 @@ git rev-parse --short HEAD && git log -1 --date=short --format=%ad
 
 Plus, from a quick look at the repo root: project name, stack/framework, and where these live —
 entrypoints/routes, domain modules, models/migrations, UI pages, tests. Read the root README and
-`CLAUDE.md`/`AGENTS.md` if present. Keep it to ~15 lines; this is the **orientation brief**.
+`CLAUDE.md`/`AGENTS.md` if present.
+
+Two more, because the sweep cannot find its best findings without them:
+
+- **Shared abstractions** — the base controller/job/service classes, the middleware stack, how auth
+  and tenancy are enforced, the shared HTTP/AI/queue client. These are what make a sibling comparison
+  possible ("this job skips the guard its four siblings apply") and what turn eight identical findings
+  into one cross-cutting entry.
+- **Test conventions** — how tests are named, where they live, how they are run.
+
+Keep it to ~15 lines; this is the **orientation brief**.
 
 ### 3. Discover the feature list
 
@@ -56,18 +66,30 @@ Slugs are kebab-case and stable — they are the JSON filenames and the dashboar
 ### 4. Sweep
 
 Default: fan out **one subagent per feature, in batches of 3–4** (a batch = one message with
-multiple Agent calls). Sequential mode: do the same work yourself, one feature at a time.
+multiple Agent calls). Sequential mode: do the same work yourself, one feature at a time, holding
+yourself to every instruction below as if you had been handed it.
 
 Each agent prompt contains, in this order:
 
 1. The orientation brief from step 2.
-2. `You are auditing exactly one feature: {name} (slug: {slug}).`
-3. `Read <abs>/reference/report-spec.md and follow it exactly.`
-4. `Write your result to <abs recon-dir>/features/{slug}.json. Return only a 3-line summary:
-   maturity, biggest finding, anything you could not inspect.`
-5. Any feature-specific pointers you already know (its route prefix, its package dir).
+2. `You are a senior product engineer doing a pre-handover readiness review of exactly one feature:
+   {name} (slug: {slug}) — the feature you are about to own. Find what is broken, missing, or will
+   page someone at 3am. An inventory of what exists is a failed review.`
+3. `Read <abs>/reference/report-spec.md. Sections 0-2 are your method, not just the schema: trace the
+   feature's primary user flow end to end through every layer before you catalogue anything, then run
+   the defect patterns in section 2b against what you traced. Expect to open 15-40 files.`
+4. `You may read, grep and use read-only git freely. Do not edit a single source file — this is
+   reconnaissance. Create <abs recon-dir>/features/ if it does not exist.`
+5. `Write your result to <abs recon-dir>/features/{slug}.json. Return only a short summary: maturity ·
+   bug counts by severity and gap count · the single biggest finding · what you could not inspect ·
+   anything you suspect is shared with other features rather than local to this one.`
+6. `If the feature does not actually exist in this codebase, still write the file: maturity "missing",
+   confidence per what you searched, and the paths and greps you tried in coverage.not_inspected.`
+7. Any feature-specific pointers you already know (its route prefix, its package dir).
 
-The JSON file is the deliverable — never ask an agent to return the report body in its response.
+The JSON file is the deliverable — never ask an agent to return the report body in its response. The
+counts in the summary are how you spot an agent that came back suspiciously empty: for a feature of
+any size, zero bugs and zero gaps usually means a shallow read, not clean code. Re-run those.
 
 ### 5. Verify
 
@@ -90,6 +112,12 @@ the build script derives them.
 `summary`, `cross_cutting`, `top_findings` and `recommended_sequence` are the parts only you can
 write: read back the feature files, look for the same root cause repeating across features, and rank
 by severity × blast radius.
+
+Then look at the **negative space** — what is uniformly absent. No feature validates input; nothing
+rate-limits; no feature handles the AI provider being down; not one flow has an error state in the UI.
+An absence that spans every feature is a cross-cutting finding, and it is the one thing a per-feature
+agent structurally cannot see. Also promote anything the agents flagged as shared: one
+`cross_cutting` entry beats the same finding filed in eight files.
 
 ### 7. Build the dashboard
 
@@ -117,3 +145,6 @@ ordered task files if they want to act on them.
 - No evidence, no finding. Every claim carries a `path:line` you actually read.
 - Blind spots go in `coverage.not_inspected[]`. Never fill a hole with a guess.
 - An honest `stub` beats a generous `beta`.
+- **An inventory is not a review.** A sweep that comes back with no bugs and no gaps across a whole
+  feature set is evidence it read shallowly, not that the codebase is clean. Say so and re-run rather
+  than shipping a report that flatters.

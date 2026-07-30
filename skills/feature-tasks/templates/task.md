@@ -30,6 +30,15 @@ call site. If sibling callers exist, list them — they are all broken too.}
 {Optional: "Note: this is a containment fix — the real model fix is task NN. Land this one anyway
 because …" Be explicit when a task deliberately stops short.}
 
+## Risk
+
+- **Also changes:** {the sibling callers of the choke point, with paths — they get the new behaviour
+  too, which is the point. "None, single caller" if you grepped and it is genuinely one.}
+- **Invalidates:** {artifacts already in the wild that this breaks — URLs in delivered email, tokens
+  users hold, webhook payload shapes third parties parse, rows already written in the old format — and
+  the migration or grace period that covers them. "Nothing in flight" if truly none.}
+- **Rollout:** {all at once, behind a flag, or staged — and why.}
+
 ## Tests
 
 `{path/to/test/dir}` — {extend the existing tests or add a new file, say which}:

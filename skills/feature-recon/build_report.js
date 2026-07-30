@@ -73,8 +73,13 @@ class Problems {
     this.warnings.push(msg);
   }
 
+  /**
+   * Print what has accumulated. Warnings are cleared so a second call cannot repeat them;
+   * errors are kept because callers branch on them.
+   */
   report() {
     for (const w of this.warnings) console.error(`WARN  ${w}`);
+    this.warnings = [];
     for (const e of this.errors) console.error(`ERROR ${e}`);
     return this.errors.length === 0;
   }
@@ -128,7 +133,68 @@ function checkEnum(problems, where, field, value, allowed) {
   }
 }
 
-function lintFeature(feature, file, problems, seenIds) {
+/** Lines in a file, or null when it cannot be read. */
+function countLines(file) {
+  let data;
+  try {
+    data = fs.readFileSync(file);
+  } catch {
+    return null;
+  }
+  if (data.length === 0) return 0;
+  let n = 0;
+  for (const byte of data) if (byte === 0x0a) n += 1;
+  return n + (data[data.length - 1] === 0x0a ? 0 : 1);
+}
+
+/**
+ * Resolves `path:line` evidence against the repo the report lives in.
+ *
+ * The only automatic check on invented evidence: a finding whose citation points at a file that
+ * is not there, or past the end of one that is, gets a WARN naming it. Advisory, never blocking —
+ * the code may simply have moved since the sweep.
+ *
+ * Disabled (every check a no-op) when no `.git` sits above <recon-dir>, so a report copied out of
+ * its repository does not warn about every citation it can no longer resolve.
+ */
+class Citations {
+  constructor(reconDir) {
+    this.root = null;
+    this.lines = new Map();
+    let dir = path.resolve(reconDir);
+    for (;;) {
+      if (fs.existsSync(path.join(dir, ".git"))) {
+        this.root = dir;
+        break;
+      }
+      const up = path.dirname(dir);
+      if (up === dir) break;
+      dir = up;
+    }
+  }
+
+  check(problems, where, label, evidence) {
+    if (this.root === null || !Array.isArray(evidence)) return;
+    for (const cite of evidence) {
+      if (typeof cite !== "string") continue;
+      const cut = cite.lastIndexOf(":");
+      const rel = cut === -1 ? "" : cite.slice(0, cut);
+      const lineno = cut === -1 ? "" : cite.slice(cut + 1);
+      // Anything that is not repo-relative `path:line` is prose or a bare path: not ours.
+      if (!rel || !/^[0-9]+$/.test(lineno) || Number(lineno) < 1) continue;
+      if (rel.startsWith("/") || rel.split("/").includes("..")) continue;
+      if (!this.lines.has(rel)) this.lines.set(rel, countLines(path.join(this.root, rel)));
+      const total = this.lines.get(rel);
+      if (total === null) {
+        problems.warn(`${where}: ${label} cites ${repr(cite)} but that file does not exist`);
+      } else if (Number(lineno) > total) {
+        problems.warn(`${where}: ${label} cites ${repr(cite)} but ${rel} has ${total} lines`);
+      }
+    }
+  }
+}
+
+function lintFeature(feature, file, problems, seenIds, citations) {
   const where = path.basename(file);
   for (const key of FEATURE_KEYS) {
     if (!(key in feature)) problems.warn(`${where}: missing key ${repr(key)}`);
@@ -139,6 +205,7 @@ function lintFeature(feature, file, problems, seenIds) {
 
   for (const flow of feature.user_flows || []) {
     checkEnum(problems, where, "user_flows[].status", flow.status, FLOW_STATUS);
+    citations.check(problems, where, repr(flow.name), flow.evidence);
   }
 
   for (const bug of feature.bugs || []) {
@@ -168,8 +235,11 @@ function lintFeature(feature, file, problems, seenIds) {
         seenIds.set(fid, where);
       }
       const evidence = finding.evidence;
+      const label = repr(fid || finding.title);
       if (!evidence || (Array.isArray(evidence) && evidence.length === 0)) {
-        problems.warn(`${where}: ${repr(fid || finding.title)} has no evidence`);
+        problems.warn(`${where}: ${label} has no evidence`);
+      } else {
+        citations.check(problems, where, label, evidence);
       }
     }
   }
@@ -316,21 +386,27 @@ function build(reconDir, outPath = null, templatePath = null) {
     throw new Exit(`no feature files in ${path.join(reconDir, "features")}`);
   }
 
+  const citations = new Citations(reconDir);
   const features = [];
   const seenIds = new Map();
   for (const file of paths) {
     const feature = loadJson(file, problems);
     if (feature === null) continue;
     if (!("slug" in feature)) feature.slug = path.basename(file, ".json");
-    lintFeature(feature, file, problems, seenIds);
+    lintFeature(feature, file, problems, seenIds, citations);
     features.push(feature);
+  }
+
+  for (const entry of project.cross_cutting || []) {
+    citations.check(problems, "project.json", repr(entry.id), entry.evidence);
   }
 
   if (!problems.report()) throw new Exit(null);
 
   const ordered = orderFeatures(project, features);
   derive(project, ordered, problems);
-  problems.report();  // derive() can add warnings; they never block
+  // derive() warnings never block, but its errors do
+  if (!problems.report()) throw new Exit(null);
 
   fs.writeFileSync(projectPath, JSON.stringify(project, null, 2) + "\n");
 

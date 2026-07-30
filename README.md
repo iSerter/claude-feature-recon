@@ -70,8 +70,11 @@ choke-point fix plan, named test cases, and the steps to update the report when 
 1. **Orient** — one pass over the repo for stack, entrypoints, module layout, test locations.
 2. **Discover** — derive the feature list from the product's own navigation, or from module/package
    dirs, or route groups. You confirm the list before anything expensive happens.
-3. **Sweep** — one subagent per feature, in batches, each reading the code and writing its own JSON
-   state file against `reference/report-spec.md`.
+3. **Sweep** — one subagent per feature, in batches, each writing its own JSON state file against
+   `reference/report-spec.md`. Each one works like a product engineer taking the feature over: trace
+   the primary user flow through every layer until it breaks, then run a defect-pattern pass over what
+   it traced — sibling divergence, failure paths, validation, tenancy, atomicity, data integrity,
+   contract drift, the empty-account walkthrough. An inventory of what exists is not the deliverable.
 4. **Roll up** — the verdict, the cross-cutting root causes, the ranked findings and a recommended
    fix sequence.
 5. **Build** — `build_report.sh` validates every file, derives all counts (no hand arithmetic), and
@@ -119,6 +122,11 @@ $B --selftest                  # check the builder itself
 Edit a JSON file by hand, rebuild, and the report follows. `ERROR` lines block the build; `WARN`
 lines (unknown enum values, missing evidence, duplicate ids) are advisory. Exit 127 means no
 runtime was found.
+
+When the report directory sits inside its own repository, every `path:line` in `evidence[]` is
+resolved against it and a citation that points at a file that isn't there — or past the end of one
+that is — comes back as a `WARN`. It is the one automatic check on invented evidence. Copy the report
+out of the repo and the check goes quiet, since nothing is left to resolve against.
 
 ## Files
 

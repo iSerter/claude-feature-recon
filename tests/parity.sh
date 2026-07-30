@@ -31,6 +31,10 @@ has node && have_js=1 || echo "SKIP node (not installed)"
 # project.json indexes first (so ordering is exercised).
 make_fixture() {
   mkdir -p "$1/features"
+  # A fake repo root, so the citation check activates and both runtimes must agree about it.
+  # b.php has 4 lines: b.php:1-3 resolve, b.php:9 is past the end, gone.php is not there at all.
+  mkdir -p "$1/.git"
+  printf 'one\ntwo\nthree\nfour\n' > "$1/b.php"
   cat > "$1/project.json" <<'EOF'
 {
   "schema_version": "1.0",
@@ -76,7 +80,7 @@ EOF
      "suggested_fix": "f", "effort": "XL", "confidence": "high"}
   ],
   "gaps": [{"id": "billing-gap-01", "title": "No dunning", "kind": "missing_feature",
-            "description": "d", "expected_by": "x", "blocks": [], "evidence": ["b.php:2"],
+            "description": "d", "expected_by": "x", "blocks": [], "evidence": ["b.php:2", "gone.php:5"],
             "effort": "L", "priority": "P0"}],
   "opportunities": [{"id": "billing-opp-01", "title": "Cache the price table",
                      "value": "medium", "effort": "S", "priority": "P2", "description": "d",
@@ -133,6 +137,13 @@ if [ "$have_py" = 1 ] && [ "$have_js" = 1 ]; then
 
   grep -q "ghost-99" "$tmp/py.err" || fail "fixture should have warned about the dangling ref"
   grep -q "weird_status" "$tmp/py.err" || fail "fixture should have warned about the bad enum"
+  grep -q "b.php:9' but b.php has 4 lines" "$tmp/py.err" \
+    || fail "fixture should have warned about the citation past end of file"
+  grep -q "gone.php:5' but that file does not exist" "$tmp/py.err" \
+    || fail "fixture should have warned about the citation to a missing file"
+  [ "$(grep -c "b.php:1'" "$tmp/py.err")" = 0 ] || fail "a citation that resolves must not warn"
+  [ "$(grep -c "weird_status" "$tmp/py.err")" = 1 ] \
+    || fail "a warning must be printed once, not repeated by the second report()"
 
   # A report must rebuild identically from its own rewritten project.json (idempotence), and
   # the other runtime must accept what this one wrote.

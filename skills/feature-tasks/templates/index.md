@@ -25,6 +25,12 @@ A cross-cutting cause that survives every task in this set is itself worth a des
 looked. Delete these from the report per each task's Report updates section. Omit this section if
 there were none.}
 
+## Needs a decision
+
+{Findings that are product or design questions rather than engineering work — there is no correct
+patch to write until someone answers. One line each: the id, the question, and who answers it. Omit
+this section if there were none.}
+
 ## Not yet written
 
 {Findings that matched the selection but were cut to keep this set readable. List id + one line so

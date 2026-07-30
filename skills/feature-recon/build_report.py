@@ -52,8 +52,11 @@ class Problems:
         self.warnings.append(msg)
 
     def report(self):
+        """Print what has accumulated. Warnings are cleared so a second call cannot repeat them;
+        errors are kept because callers branch on them."""
         for w in self.warnings:
             print(f"WARN  {w}", file=sys.stderr)
+        self.warnings = []
         for e in self.errors:
             print(f"ERROR {e}", file=sys.stderr)
         return not self.errors
@@ -74,7 +77,60 @@ def check_enum(problems, where, field, value, allowed):
         problems.warn(f"{where}: {field}={value!r} is not one of {allowed}")
 
 
-def lint_feature(feature, path, problems, seen_ids):
+def count_lines(path):
+    """Lines in a file, or None when it cannot be read."""
+    try:
+        data = path.read_bytes()
+    except OSError:
+        return None
+    if not data:
+        return 0
+    return data.count(b"\n") + (0 if data.endswith(b"\n") else 1)
+
+
+class Citations:
+    """Resolves `path:line` evidence against the repo the report lives in.
+
+    The only automatic check on invented evidence: a finding whose citation points at a file that
+    is not there, or past the end of one that is, gets a WARN naming it. Advisory, never blocking —
+    the code may simply have moved since the sweep.
+
+    Disabled (every check a no-op) when no `.git` sits above <recon-dir>, so a report copied out of
+    its repository does not warn about every citation it can no longer resolve.
+    """
+
+    def __init__(self, recon_dir):
+        self.root = None
+        self.lines = {}
+        here = Path(recon_dir).resolve()
+        for d in [here] + list(here.parents):
+            if (d / ".git").exists():
+                self.root = d
+                break
+
+    def check(self, problems, where, label, evidence):
+        if self.root is None or not isinstance(evidence, list):
+            return
+        for cite in evidence:
+            if not isinstance(cite, str):
+                continue
+            rel, _, lineno = cite.rpartition(":")
+            # Anything that is not repo-relative `path:line` is prose or a bare path: not ours.
+            if not rel or not lineno.isdigit() or int(lineno) < 1:
+                continue
+            if rel.startswith("/") or ".." in Path(rel).parts:
+                continue
+            if rel not in self.lines:
+                self.lines[rel] = count_lines(self.root / rel)
+            total = self.lines[rel]
+            if total is None:
+                problems.warn(f"{where}: {label} cites {cite!r} but that file does not exist")
+            elif int(lineno) > total:
+                problems.warn(
+                    f"{where}: {label} cites {cite!r} but {rel} has {total} lines")
+
+
+def lint_feature(feature, path, problems, seen_ids, citations):
     where = path.name
     for key in FEATURE_KEYS:
         if key not in feature:
@@ -85,6 +141,7 @@ def lint_feature(feature, path, problems, seen_ids):
 
     for flow in feature.get("user_flows", []):
         check_enum(problems, where, "user_flows[].status", flow.get("status"), FLOW_STATUS)
+        citations.check(problems, where, repr(flow.get("name")), flow.get("evidence"))
 
     for bug in feature.get("bugs", []):
         check_enum(problems, where, "bugs[].severity", bug.get("severity"), SEVERITY)
@@ -108,8 +165,11 @@ def lint_feature(feature, path, problems, seen_ids):
                 problems.warn(f"{where}: duplicate finding id {fid!r} (also in {seen_ids[fid]})")
             else:
                 seen_ids[fid] = where
+            label = repr(fid or finding.get("title"))
             if not finding.get("evidence"):
-                problems.warn(f"{where}: {fid or finding.get('title')!r} has no evidence")
+                problems.warn(f"{where}: {label} has no evidence")
+            else:
+                citations.check(problems, where, label, finding.get("evidence"))
 
 
 def derive(project, features, problems):
@@ -213,6 +273,7 @@ def build(recon_dir, out_path=None, template_path=None):
     if not feature_paths:
         raise SystemExit(f"no feature files in {recon_dir / 'features'}")
 
+    citations = Citations(recon_dir)
     features = []
     seen_ids = {}
     for path in feature_paths:
@@ -220,15 +281,19 @@ def build(recon_dir, out_path=None, template_path=None):
         if feature is None:
             continue
         feature.setdefault("slug", path.stem)
-        lint_feature(feature, path, problems, seen_ids)
+        lint_feature(feature, path, problems, seen_ids, citations)
         features.append(feature)
+
+    for entry in project.get("cross_cutting") or []:
+        citations.check(problems, "project.json", repr(entry.get("id")), entry.get("evidence"))
 
     if not problems.report():
         raise SystemExit(1)
 
     features = order_features(project, features)
     derive(project, features, problems)
-    problems.report()  # derive() can add warnings; they never block
+    if not problems.report():  # derive() warnings never block, but its errors do
+        raise SystemExit(1)
 
     project_path.write_text(json.dumps(project, indent=2, ensure_ascii=False) + "\n")
 

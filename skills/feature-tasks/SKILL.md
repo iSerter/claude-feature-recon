@@ -9,6 +9,10 @@ Converts findings in `<recon-dir>` into task files a developer (or agent) can pi
 Each task fixes one root cause, cites the evidence, names the tests, and closes the loop by updating
 the report itself.
 
+Write these as the engineer who gets blamed if one of these fixes breaks production. That is the bar:
+not "here is roughly where the bug is" but "here is the choke point, here is what else calls it, here
+is what this change invalidates, and here is the test that fails before and passes after."
+
 Bundled templates live beside this SKILL.md (`${CLAUDE_PLUGIN_ROOT}/skills/feature-tasks/`):
 `templates/task.md`, `templates/index.md`. Use absolute paths.
 
@@ -46,6 +50,11 @@ For each selected finding, open the cited `path:line` and confirm the defect is 
 Never copy a finding's description into a task without reading the code first. A task built on a
 stale citation sends someone to the wrong file.
 
+While you are in the code, **re-judge the severity** against real product impact — the sweep saw one
+feature, you can see the whole report and the current source. If a `medium` turns out to sit on the
+signup path, or a `critical` turns out to be unreachable in practice, say so in the task and give your
+own rating alongside the report's. Do not silently overwrite it.
+
 ### 4. Group findings into tasks
 
 One task = one fix at one choke point. This is the judgement step:
@@ -62,12 +71,19 @@ One task = one fix at one choke point. This is the judgement step:
   format, artifacts already in the wild break — links in email already delivered, webhooks third
   parties already call, rows already written. Name them and give the task a migration or grace-period
   step. A fix that silently breaks in-flight data is worse than the bug.
+- **Refuse the non-tasks.** Some findings are not engineering work: they are product decisions ("should
+  expired links 404 or redirect?"), open design questions, or a disagreement about intent. There is no
+  correct patch to write, so do not write one. List them in the index under **Needs a decision** with
+  the question and who has to answer it.
 
 ### 5. Write the files
 
 Order tasks so each one unblocks the next: irreversible/data-losing first, then cheap containment,
 then structural work. Respect `recommended_sequence` from the report where it still holds, and say
 where you departed from it.
+
+When a fix changes behaviour users currently depend on, say how it should land: behind a flag, in
+stages, or with a grace period. A correct fix deployed all at once can still be an incident.
 
 - `<out>/00-index.md` — from `templates/index.md`
 - `<out>/{nn}-{slug}.md` — from `templates/task.md`, `nn` zero-padded from 01
@@ -104,4 +120,5 @@ fixed or unverifiable. Do not start implementing unless they ask.
 - Task files describe the fix; they do not contain the fix. No patches, no rewritten files.
 - Every task carries at least one `path:line` you personally opened.
 - No task without a test plan. "Add tests" is not a test plan — name the cases and the file.
-- Keep each task under roughly 60 lines. If it needs more, it is two tasks.
+- Keep each task under roughly 70 lines — about the length of `templates/task.md` itself. If it needs
+  more, it is two tasks.
