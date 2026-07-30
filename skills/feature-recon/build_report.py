@@ -2,13 +2,15 @@
 """Build a self-contained HTML dashboard from feature-recon JSON state files.
 
     python3 build_report.py <recon-dir> [--out PATH]
+    python3 build_report.py --check <recon-dir>
     python3 build_report.py --selftest
 
 Reads <recon-dir>/project.json and <recon-dir>/features/*.json, lints them against the
 report spec, derives every count (so the model never has to do arithmetic), writes the
 counts back into project.json, and injects the merged payload into template.html.
 
-Stdlib only. No install step.
+Stdlib only. No install step. build_report.js is a port of this script with the same CLI
+and byte-identical output; build_report.sh picks whichever runtime the machine has.
 """
 
 import argparse
@@ -237,6 +239,28 @@ def build(recon_dir, out_path=None, template_path=None):
     return out_path, project
 
 
+def check(recon_dir):
+    """--check: does every state file parse? Nothing else.
+
+    Runs mid-sweep, before project.json exists, so a missing file is skipped rather than failed.
+    """
+    recon_dir = Path(recon_dir)
+    files = [p for p in [recon_dir / "project.json"] if p.exists()]
+    files += sorted((recon_dir / "features").glob("*.json"))
+    if not files:
+        raise SystemExit(f"no JSON state files in {recon_dir}")
+    bad = 0
+    for path in files:
+        problems = Problems()
+        if load_json(path, problems) is None:
+            for err in problems.errors:
+                print(f"BAD: {err}")
+            bad += 1
+    if bad:
+        raise SystemExit(f"{bad} of {len(files)} files did not parse")
+    print(f"OK {len(files)} JSON files parse")
+
+
 FIXTURE_FEATURES = [
     {
         "schema_version": "1.0", "slug": "alpha", "name": "Alpha", "reviewed_at": "2026-07-30",
@@ -311,6 +335,8 @@ def selftest():
         assert payload["project"]["project_name"] == "Fixture"
         assert [f["slug"] for f in payload["features"]] == ["alpha", "beta"]
         assert "Fixture" in html
+
+        check(recon)
     print("selftest OK")
 
 
@@ -320,6 +346,8 @@ def main():
     parser.add_argument("recon_dir", nargs="?", help="directory holding project.json + features/")
     parser.add_argument("--out", help="output HTML path (default <recon-dir>/recon-report.html)")
     parser.add_argument("--template", help="override the bundled template.html")
+    parser.add_argument("--check", action="store_true",
+                        help="only check that every JSON file parses, then exit")
     parser.add_argument("--selftest", action="store_true", help="run the built-in check and exit")
     args = parser.parse_args()
 
@@ -328,6 +356,9 @@ def main():
         return
     if not args.recon_dir:
         parser.error("recon_dir is required (or use --selftest)")
+    if args.check:
+        check(args.recon_dir)
+        return
 
     out, project = build(args.recon_dir, args.out, args.template)
     t = project["totals"]

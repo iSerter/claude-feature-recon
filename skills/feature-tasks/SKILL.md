@@ -82,7 +82,7 @@ Every task ends with a **Report updates** section telling whoever lands the fix 
 resolved finding from `<recon-dir>/features/{slug}.json`, then re-run:
 
 ```sh
-python3 <plugin>/skills/feature-recon/build_report.py <recon-dir>
+sh <plugin>/skills/feature-recon/build_report.sh <recon-dir>
 ```
 
 The build script re-derives every count and total from the feature files, so **no counts are ever

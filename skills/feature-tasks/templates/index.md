@@ -39,4 +39,4 @@ they are not lost. Omit if everything was written.}
 - **{Anything the repo needs known about running tests}** — {e.g. targeted file lists rather than the
   full suite; known pre-existing failures}.
 - **Update the report in the same PR as the fix**, per each task's Report updates section. Counts and
-  totals are derived by `build_report.py` — never hand-edit them.
+  totals are derived by `build_report.sh` — never hand-edit them.

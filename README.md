@@ -14,8 +14,13 @@ every claim and declares what it could not inspect. Read-only — it never chang
 /plugin install feature-recon
 ```
 
-A local checkout works too — pass its path instead of the URL. Requires `python3` (stdlib only,
-nothing to install) and `git` for the commit stamp.
+A local checkout works too — pass its path instead of the URL.
+
+**Requirements:** `git` for the commit stamp, and **either `python3` (3.6+) or `node` (14+)** to
+build the dashboard — whichever you already have. `build_report.sh` detects one and uses it; the
+Python and JavaScript builders are ports of each other and emit byte-identical reports, both
+standard-library only, nothing to install. Force one with `FEATURE_RECON_RUNTIME=node`. With
+neither runtime the sweep still produces the JSON state files; only the HTML render is skipped.
 
 ## Use
 
@@ -69,7 +74,7 @@ choke-point fix plan, named test cases, and the steps to update the report when 
    state file against `reference/report-spec.md`.
 4. **Roll up** — the verdict, the cross-cutting root causes, the ranked findings and a recommended
    fix sequence.
-5. **Build** — `build_report.py` validates every file, derives all counts (no hand arithmetic), and
+5. **Build** — `build_report.sh` validates every file, derives all counts (no hand arithmetic), and
    injects the data into the dashboard template.
 
 ## The dashboard
@@ -103,12 +108,17 @@ and the reserved status palette is used only for flow state.
 ## Rebuild the dashboard without re-running the sweep
 
 ```sh
-python3 <plugin>/skills/feature-recon/build_report.py docs/recon
-python3 <plugin>/skills/feature-recon/build_report.py --selftest   # check the script itself
+B="sh <plugin>/skills/feature-recon/build_report.sh"
+
+$B docs/recon                  # rebuild the dashboard from the JSON
+$B --check docs/recon          # do all the state files still parse?
+$B --which                     # which runtime would be used
+$B --selftest                  # check the builder itself
 ```
 
 Edit a JSON file by hand, rebuild, and the report follows. `ERROR` lines block the build; `WARN`
-lines (unknown enum values, missing evidence, duplicate ids) are advisory.
+lines (unknown enum values, missing evidence, duplicate ids) are advisory. Exit 127 means no
+runtime was found.
 
 ## Files
 
@@ -116,8 +126,11 @@ lines (unknown enum values, missing evidence, duplicate ids) are advisory.
 |---|---|
 | `skills/feature-recon/SKILL.md` | the sweep procedure Claude follows |
 | `skills/feature-recon/reference/report-spec.md` | the JSON contract, handed to each subagent |
-| `skills/feature-recon/build_report.py` | validate + derive counts + render (stdlib only) |
+| `skills/feature-recon/build_report.sh` | runtime picker — the only entry point anything calls |
+| `skills/feature-recon/build_report.py` | validate + derive counts + render, Python (stdlib only) |
+| `skills/feature-recon/build_report.js` | the same, JavaScript (Node builtins only) |
 | `skills/feature-recon/template.html` | the dashboard template |
+| `tests/parity.sh` | proves the two builders emit identical bytes |
 | `skills/feature-tasks/SKILL.md` | the findings → tasks procedure |
 | `skills/feature-tasks/templates/task.md` | one task file's shape |
 | `skills/feature-tasks/templates/index.md` | the fix-set index's shape |

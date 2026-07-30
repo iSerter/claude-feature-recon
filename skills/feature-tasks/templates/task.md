@@ -54,7 +54,7 @@ pre-existing failures in this area that will need reading first.}
 3. Rebuild — this re-derives every count and total, so never edit `counts` or `totals` by hand:
 
    ```sh
-   python3 <plugin>/skills/feature-recon/build_report.py {recon-dir}
+   sh <plugin>/skills/feature-recon/build_report.sh {recon-dir}
    ```
 
 4. Commit the report changes with the fix, in the same PR.

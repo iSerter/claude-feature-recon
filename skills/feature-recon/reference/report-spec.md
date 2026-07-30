@@ -146,7 +146,7 @@ break. Omit nothing — the build script warns on missing keys.
 ## 4. Rollup — `<recon-dir>/project.json`
 
 Index + prose only. Findings live in the feature files; do not copy them here.
-**Do not write `counts` or `totals`** — `build_report.py` derives them from the feature files so they
+**Do not write `counts` or `totals`** — `build_report.sh` derives them from the feature files so they
 always match what is on disk.
 
 ```json
@@ -195,7 +195,7 @@ always match what is on disk.
 ## 5. Keeping the report current as fixes land
 
 Findings have no `status` field on purpose. When a finding is fixed, **delete it** from its feature
-file and re-run `build_report.py`, which re-derives every `counts` and `totals` value from the
+file and re-run `build_report.sh`, which re-derives every `counts` and `totals` value from the
 feature files — never hand-edit those. Then prune the finding's id from `project.json`'s
 `top_findings` and `recommended_sequence`, and from any `cross_cutting[].affects` it no longer
 applies to.

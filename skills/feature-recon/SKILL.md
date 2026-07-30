@@ -10,7 +10,12 @@ A reconnaissance sweep, not an authoritative audit: it reports what it actually 
 feature, a rollup, and a self-contained HTML dashboard built from them.
 
 Bundled files live beside this SKILL.md (`${CLAUDE_PLUGIN_ROOT}/skills/feature-recon/`):
-`reference/report-spec.md`, `build_report.py`, `template.html`. Always pass absolute paths.
+`reference/report-spec.md`, `build_report.sh`, `template.html`. Always pass absolute paths.
+
+`build_report.sh` is the only entry point you call: it runs whichever of python3 / node the
+machine has. Never call `build_report.py` or `build_report.js` directly, and never assume a
+runtime — if the wrapper reports that neither is installed, say so and stop at step 6, where the
+JSON state files are already complete and useful on their own.
 
 ## Procedure
 
@@ -67,8 +72,11 @@ The JSON file is the deliverable — never ask an agent to return the report bod
 ### 5. Verify
 
 ```sh
-for f in <recon-dir>/features/*.json; do python3 -m json.tool "$f" >/dev/null || echo "BAD: $f"; done
+sh <abs>/build_report.sh --check <recon-dir>
 ```
+
+It prints `BAD: <path>: <what went wrong>` for every file that does not parse, or `OK N JSON
+files parse`. Run it again after step 6 to catch a hand-written `project.json`.
 
 Re-run a failed or missing feature once. If it fails twice, write a minimal file for it with
 `confidence: "low"` and the failure recorded in `coverage.not_inspected`.
@@ -86,12 +94,16 @@ by severity × blast radius.
 ### 7. Build the dashboard
 
 ```sh
-python3 <abs>/build_report.py <recon-dir>
+sh <abs>/build_report.sh <recon-dir>
 ```
 
-Stdlib only, no install step. It validates, derives all counts, and writes
+Standard library only, no install step. It validates, derives all counts, and writes
 `<recon-dir>/recon-report.html` — self-contained, opens by double-click. Fix anything it reports as
 `ERROR`; `WARN` lines are yours to judge.
+
+Exit 127 means the machine has neither python3 nor node. Do not try to render the HTML yourself and
+do not hand-compute counts — report the JSON paths, tell the user which runtime to install, and
+that re-running just this step finishes the job.
 
 ### 8. Report
 
