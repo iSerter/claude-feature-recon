@@ -1,0 +1,1400 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Feature Recon</title>
+<style>
+/* ============================================================================
+   Tokens — dataviz reference palette.
+   Two hue families carry meaning, and only two:
+     blue = magnitude & structure (maturity ordinal ramp, density grids)
+     red  = severity (ordinal ramp, critical furthest from the surface)
+   Both ramps validated with the palette validator in --ordinal mode against
+   both surfaces: monotone lightness, adjacent dL >= 0.06, light end >= 2:1.
+   ============================================================================ */
+:root {
+  color-scheme: light;
+  --page: #f9f9f7;
+  --surface: #fcfcfb;
+  --surface-2: #f4f3ef;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #898781;
+  --grid: #e1e0d9;
+  --baseline: #c3c2b7;
+  --border: rgba(11,11,11,0.10);
+  --border-2: rgba(11,11,11,0.06);
+  --wash: rgba(11,11,11,0.035);
+  --shadow: 0 1px 2px rgba(11,11,11,0.04), 0 8px 24px -12px rgba(11,11,11,0.10);
+  --shadow-lift: 0 1px 2px rgba(11,11,11,0.05), 0 14px 34px -14px rgba(11,11,11,0.18);
+  --glass: rgba(249,249,247,0.82);
+
+  /* maturity — ordinal blue, light->dark = less->more ready */
+  --mat-missing: #86b6ef;
+  --mat-stub: #5598e7;
+  --mat-alpha: #2a78d6;
+  --mat-beta: #1c5cab;
+  --mat-production_ready: #0d366b;
+  /* blue sequential steps for density grids + meter tracks */
+  --seq-0: #eef4fd;
+  --seq-1: #cde2fb;
+  --seq-2: #9ec5f4;
+  --seq-3: #5598e7;
+  --seq-4: #2a78d6;
+  --seq-5: #184f95;
+  --accent: #2a78d6;
+  --accent-soft: rgba(42,120,214,0.10);
+
+  /* severity — ordinal red */
+  --sev-critical: #6b1616;
+  --sev-high: #9c2626;
+  --sev-medium: #cc4444;
+  --sev-low: #e08585;
+
+  /* finding kind (3 categorical slots; always paired with a text label) */
+  --kind-bug: #9c2626;
+  --kind-gap: #2a78d6;
+  --kind-opp: #1baf7a;
+
+  /* reserved status palette — fixed, never themed; always dot + label */
+  --st-good: #0ca30c;
+  --st-warning: #fab219;
+  --st-critical: #d03b3b;
+  --good-text: #006300;
+
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --r: 14px;
+  --r-sm: 8px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --page: #0d0d0d;
+    --surface: #1a1a19;
+    --surface-2: #131312;
+    --ink: #ffffff;
+    --ink-2: #c3c2b7;
+    --muted: #898781;
+    --grid: #2c2c2a;
+    --baseline: #383835;
+    --border: rgba(255,255,255,0.10);
+    --border-2: rgba(255,255,255,0.06);
+    --wash: rgba(255,255,255,0.04);
+    --shadow: 0 1px 2px rgba(0,0,0,0.5), 0 10px 30px -14px rgba(0,0,0,0.7);
+    --shadow-lift: 0 1px 2px rgba(0,0,0,0.6), 0 18px 40px -16px rgba(0,0,0,0.85);
+    --glass: rgba(13,13,13,0.80);
+    --mat-missing: #184f95;
+    --mat-stub: #256abf;
+    --mat-alpha: #3987e5;
+    --mat-beta: #6da7ec;
+    --mat-production_ready: #9ec5f4;
+    --seq-0: #12233a;
+    --seq-1: #163256;
+    --seq-2: #1c5cab;
+    --seq-3: #2a78d6;
+    --seq-4: #5598e7;
+    --seq-5: #9ec5f4;
+    --accent: #3987e5;
+    --accent-soft: rgba(57,135,229,0.16);
+    --sev-critical: #f09a95;
+    --sev-high: #e06b66;
+    --sev-medium: #c04440;
+    --sev-low: #94302d;
+    --kind-bug: #e06b66;
+    --kind-gap: #3987e5;
+    --kind-opp: #199e70;
+    --good-text: #0ca30c;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface: #1a1a19; --surface-2: #131312;
+  --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
+  --grid: #2c2c2a; --baseline: #383835;
+  --border: rgba(255,255,255,0.10); --border-2: rgba(255,255,255,0.06);
+  --wash: rgba(255,255,255,0.04);
+  --shadow: 0 1px 2px rgba(0,0,0,0.5), 0 10px 30px -14px rgba(0,0,0,0.7);
+  --shadow-lift: 0 1px 2px rgba(0,0,0,0.6), 0 18px 40px -16px rgba(0,0,0,0.85);
+  --glass: rgba(13,13,13,0.80);
+  --mat-missing: #184f95; --mat-stub: #256abf; --mat-alpha: #3987e5;
+  --mat-beta: #6da7ec; --mat-production_ready: #9ec5f4;
+  --seq-0: #12233a; --seq-1: #163256; --seq-2: #1c5cab; --seq-3: #2a78d6;
+  --seq-4: #5598e7; --seq-5: #9ec5f4;
+  --accent: #3987e5; --accent-soft: rgba(57,135,229,0.16);
+  --sev-critical: #f09a95; --sev-high: #e06b66; --sev-medium: #c04440; --sev-low: #94302d;
+  --kind-bug: #e06b66; --kind-gap: #3987e5; --kind-opp: #199e70;
+  --good-text: #0ca30c;
+}
+
+/* ---------- base ---------- */
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 84px; }
+body {
+  margin: 0; background: var(--page); color: var(--ink);
+  font: 15px/1.6 var(--sans); -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+.wrap { max-width: 1200px; margin: 0 auto; padding: 0 28px 120px; }
+h1, h2, h3, h4 { margin: 0; font-weight: 600; letter-spacing: -0.015em; }
+p { margin: 0 0 12px; }
+a { color: inherit; text-decoration: none; }
+code, .mono { font-family: var(--mono); font-size: 0.86em; }
+.num { font-variant-numeric: tabular-nums; }
+.dim { color: var(--ink-2); }
+.faint { color: var(--muted); }
+.small { font-size: 13px; }
+.tiny { font-size: 12px; }
+.nowrap { white-space: nowrap; }
+.hidden { display: none !important; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+
+/* ---------- topbar ---------- */
+.topbar {
+  position: sticky; top: 0; z-index: 40;
+  background: var(--glass); backdrop-filter: saturate(180%) blur(14px);
+  border-bottom: 1px solid var(--border-2);
+}
+.topbar .inner {
+  max-width: 1200px; margin: 0 auto; padding: 11px 28px;
+  display: flex; align-items: center; gap: 18px;
+}
+.brand { display: flex; align-items: center; gap: 9px; font-weight: 600; font-size: 14px; }
+.brand .glyph {
+  width: 22px; height: 22px; border-radius: 6px; flex: none;
+  background: linear-gradient(140deg, var(--accent), var(--mat-production_ready));
+  display: grid; place-items: center; color: #fff; font-size: 11px; font-weight: 700;
+}
+.brand .sep { color: var(--baseline); font-weight: 400; }
+.brand .sub { color: var(--muted); font-weight: 500; }
+nav.jump { margin-left: auto; display: flex; gap: 2px; }
+nav.jump a {
+  font-size: 13px; color: var(--ink-2); padding: 5px 10px; border-radius: 999px;
+}
+nav.jump a:hover { background: var(--wash); color: var(--ink); }
+.iconbtn {
+  font: inherit; font-size: 13px; cursor: pointer; width: 30px; height: 30px;
+  display: grid; place-items: center; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--surface); color: var(--ink-2);
+}
+.iconbtn:hover { background: var(--wash); color: var(--ink); }
+
+/* ---------- cover ---------- */
+.cover { position: relative; padding: 60px 0 8px; }
+.cover::before {
+  content: ""; position: absolute; inset: -40px -200px auto -200px; height: 420px;
+  background:
+    radial-gradient(58% 70% at 22% 12%, var(--accent-soft), transparent 70%),
+    radial-gradient(42% 60% at 84% 0%, var(--accent-soft), transparent 72%);
+  pointer-events: none; z-index: -1;
+}
+.cover-grid { display: grid; grid-template-columns: 1fr auto; gap: 56px; align-items: center; }
+.eyebrow {
+  font-size: 11.5px; letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--muted); font-weight: 600;
+}
+.cover h1 {
+  font-size: clamp(38px, 6vw, 62px); line-height: 1.02; letter-spacing: -0.035em;
+  margin: 14px 0 0; font-weight: 650;
+}
+.cover .lede { margin-top: 16px; max-width: 60ch; font-size: 16px; color: var(--ink-2); }
+.stampline {
+  margin-top: 22px; display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center;
+}
+.stamp {
+  display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--ink-2);
+  border: 1px solid var(--border); background: var(--surface);
+  border-radius: 999px; padding: 4px 11px;
+}
+.stamp b { color: var(--ink); font-weight: 600; }
+
+/* gauge */
+.gauge { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.gauge svg { display: block; }
+.gauge .ring-track { stroke: var(--seq-1); }
+.gauge .ring-beta { stroke: var(--mat-alpha); }
+.gauge .ring-prod { stroke: var(--mat-production_ready); }
+.gauge circle { fill: none; stroke-linecap: round; transform: rotate(-90deg); transform-origin: 50% 50%; }
+.gauge .hero-fig {
+  font-size: 50px; font-weight: 650; letter-spacing: -0.035em; line-height: 1;
+}
+.gauge .hero-cap { font-size: 12px; color: var(--muted); margin-top: 3px; }
+.gauge .gl { display: flex; flex-direction: column; gap: 5px; font-size: 12.5px; color: var(--ink-2); }
+.gauge .gl span { display: inline-flex; align-items: center; gap: 8px; }
+.gauge .gl b { color: var(--ink); }
+
+/* ---------- section scaffolding ---------- */
+.sec { margin-top: 52px; scroll-margin-top: 80px; }
+.sec > header.sh {
+  display: flex; align-items: baseline; gap: 14px; margin-bottom: 16px;
+  border-bottom: 1px solid var(--grid); padding-bottom: 9px;
+}
+.sec > header.sh h2 {
+  font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em;
+  color: var(--muted); font-weight: 650; white-space: nowrap;
+}
+.sec > header.sh .cap { font-size: 12.5px; color: var(--muted); margin-left: auto; text-align: right; }
+.card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r); padding: 22px 24px; box-shadow: var(--shadow);
+}
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+
+/* ---------- notice ---------- */
+.notice {
+  margin-top: 30px; padding: 15px 18px; border-radius: var(--r-sm);
+  border: 1px solid var(--border); background: var(--surface);
+  border-left: 3px solid var(--accent);
+  font-size: 13.5px; color: var(--ink-2); box-shadow: var(--shadow);
+}
+.notice b { color: var(--ink); }
+
+/* ---------- stacked bars ---------- */
+.stack { display: flex; border-radius: 0 5px 5px 0; }
+.stack .seg {
+  position: relative; min-width: 3px; height: 100%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 650; font-variant-numeric: tabular-nums;
+  box-shadow: 2px 0 0 0 var(--surface);
+  transform-origin: left center;
+}
+.stack .seg:last-child { box-shadow: none; border-radius: 0 5px 5px 0; }
+.stack .seg.z { display: none; }
+/* Segment label ink is declared per step, so a theme flip is pure CSS. */
+.seg.m-missing { background: var(--mat-missing); color: #0b0b0b; }
+.seg.m-stub { background: var(--mat-stub); color: #ffffff; }
+.seg.m-alpha { background: var(--mat-alpha); color: #ffffff; }
+.seg.m-beta { background: var(--mat-beta); color: #ffffff; }
+.seg.m-production_ready { background: var(--mat-production_ready); color: #ffffff; }
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) .seg.m-missing { color: #ffffff; }
+  :root:where(:not([data-theme="light"])) .seg.m-production_ready { color: #0b0b0b; }
+}
+:root[data-theme="dark"] .seg.m-missing { color: #ffffff; }
+:root[data-theme="dark"] .seg.m-production_ready { color: #0b0b0b; }
+
+.maturity-band .stack { height: 34px; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 22px; margin-top: 16px; font-size: 12.5px; color: var(--ink-2); }
+.legend .key { display: inline-flex; align-items: center; gap: 8px; }
+.legend .key.off { opacity: 0.45; }
+.sw { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+.legend .num { color: var(--ink); font-weight: 650; }
+
+/* ---------- stat tiles ---------- */
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(178px, 1fr)); gap: 16px; }
+.tile {
+  position: relative; overflow: hidden;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r); padding: 17px 18px 16px; box-shadow: var(--shadow);
+  transition: transform .16s ease, box-shadow .16s ease;
+}
+.tile:hover { transform: translateY(-2px); box-shadow: var(--shadow-lift); }
+.tile::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--tc, var(--baseline)); }
+.tile .v { font-size: 38px; font-weight: 650; line-height: 1.05; letter-spacing: -0.035em; }
+.tile .l { margin-top: 5px; font-size: 12.5px; color: var(--ink-2); display: flex; align-items: center; gap: 7px; font-weight: 500; }
+.tile .sub { margin-top: 7px; font-size: 12px; color: var(--muted); line-height: 1.45; }
+.dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+
+/* ---------- verdict ---------- */
+.verdict { font-size: 15.5px; line-height: 1.72; color: var(--ink-2); max-width: 78ch; }
+.verdict p:first-child::first-letter { font-size: 1em; }
+
+/* ---------- bar rows ---------- */
+.rows { display: flex; flex-direction: column; gap: 2px; }
+.row {
+  display: grid; grid-template-columns: 176px 1fr 38px; gap: 14px; align-items: center;
+  padding: 5px 8px; border-radius: 7px; margin: 0 -8px;
+}
+.row:hover { background: var(--wash); }
+.row .rlabel {
+  font-size: 13px; text-align: right; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2);
+}
+.row:hover .rlabel { color: var(--ink); }
+.row .track { height: 16px; background: var(--wash); border-radius: 0 5px 5px 0; }
+.row .track .stack { height: 16px; }
+.row .rval { font-size: 12.5px; color: var(--ink-2); font-variant-numeric: tabular-nums; text-align: right; }
+.axis-note { margin-top: 16px; font-size: 12px; color: var(--muted); line-height: 1.5; }
+
+/* ---------- heat grid ---------- */
+.heat { display: grid; gap: 3px; font-size: 12px; }
+.heat .hc {
+  position: relative; aspect-ratio: 1 / 0.62; border-radius: 5px;
+  display: grid; place-items: center; font-weight: 650;
+  font-variant-numeric: tabular-nums; border: 1px solid var(--border-2);
+}
+.heat .hlab { display: grid; place-items: center; color: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: 0.04em; }
+.heat .hlab.row-lab { justify-content: end; padding-right: 8px; }
+.heat .d0 { background: var(--seq-0); color: var(--muted); }
+.heat .d1 { background: var(--seq-1); color: #0b0b0b; }
+.heat .d2 { background: var(--seq-2); color: #0b0b0b; }
+.heat .d3 { background: var(--seq-3); color: #ffffff; }
+.heat .d4 { background: var(--seq-4); color: #ffffff; }
+.heat .d5 { background: var(--seq-5); color: #ffffff; }
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) .heat .d1 { color: #ffffff; }
+  :root:where(:not([data-theme="light"])) .heat .d2 { color: #ffffff; }
+  :root:where(:not([data-theme="light"])) .heat .d4 { color: #0b0b0b; }
+  :root:where(:not([data-theme="light"])) .heat .d5 { color: #0b0b0b; }
+}
+:root[data-theme="dark"] .heat .d1, :root[data-theme="dark"] .heat .d2 { color: #ffffff; }
+:root[data-theme="dark"] .heat .d4, :root[data-theme="dark"] .heat .d5 { color: #0b0b0b; }
+
+/* dependency matrix */
+.dep { overflow-x: auto; }
+.dep table { border-collapse: separate; border-spacing: 3px; }
+.dep th {
+  font-size: 10.5px; font-weight: 600; color: var(--muted); padding: 0;
+  letter-spacing: 0.03em;
+}
+.dep th.col { vertical-align: bottom; }
+/* vertical-rl keeps the label inside its own column box, so it stays aligned with the cells.
+   No fixed height + nowrap: the header row sizes itself to the longest name instead of
+   wrapping one label into two columns' worth of width. */
+.dep th.col span {
+  writing-mode: vertical-rl; transform: rotate(180deg);
+  display: inline-block; white-space: nowrap;
+}
+.dep th.rowh { text-align: right; padding-right: 8px; font-size: 11.5px; white-space: nowrap; }
+.dep td { width: 16px; height: 16px; padding: 0; }
+.dep td i { display: block; width: 16px; height: 16px; border-radius: 4px; background: var(--wash); }
+.dep td i.on { background: var(--accent); }
+.dep td i.self { background: transparent; border: 1px dashed var(--border); }
+
+/* ---------- chips ---------- */
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 10px; border-radius: 999px; font-size: 11.5px; font-weight: 600;
+  border: 1px solid var(--border); background: var(--surface-2); color: var(--ink-2);
+  white-space: nowrap;
+}
+.chip .sw { width: 8px; height: 8px; border-radius: 50%; }
+.chip.plain { font-weight: 500; }
+a.chip:hover { border-color: var(--accent); color: var(--ink); }
+.pill {
+  display: inline-block; padding: 2px 7px; border-radius: 5px; font-size: 10.5px;
+  border: 1px solid var(--border); color: var(--muted); background: var(--surface-2);
+  font-weight: 650; letter-spacing: 0.02em; text-transform: uppercase;
+}
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+
+/* ---------- feature health grid ---------- */
+.fgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(258px, 1fr)); gap: 14px; }
+/* flex-column, not block: a <button> vertically centres its content box, which would
+   misalign cards of differing height inside the same grid row. */
+.fcard {
+  display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start;
+  text-align: left; width: 100%; font: inherit; cursor: pointer;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--r);
+  padding: 15px 16px; box-shadow: var(--shadow);
+  transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease;
+}
+.fcard:hover { transform: translateY(-2px); box-shadow: var(--shadow-lift); border-color: var(--baseline); }
+.fcard .fh { display: flex; align-items: center; gap: 9px; }
+.fcard .fn { font-weight: 650; font-size: 14.5px; letter-spacing: -0.01em; }
+/* Maturity is named in text as well as coloured — the dot alone never carries it. */
+.fcard .mat { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); font-weight: 650; }
+.fcard .mdot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.fcard .tests { margin-left: auto; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.fcard .tests.none { color: var(--sev-high); font-weight: 650; }
+.fcard .bar { display: flex; height: 7px; margin: 11px 0 11px; border-radius: 0 4px 4px 0; background: var(--wash); }
+.fcard .matline { margin-top: 5px; }
+.fcard .bar i { height: 100%; box-shadow: 2px 0 0 0 var(--surface); }
+.fcard .bar i:last-child { box-shadow: none; border-radius: 0 4px 4px 0; }
+.fcard .meta { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.fcard .meta b { color: var(--ink-2); font-weight: 650; }
+
+/* ---------- table ---------- */
+table.data { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+table.data th, table.data td { text-align: left; padding: 10px 11px; border-bottom: 1px solid var(--grid); }
+table.data th {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.07em;
+  color: var(--muted); font-weight: 650; cursor: pointer; user-select: none; white-space: nowrap;
+  position: sticky; top: 60px; background: var(--surface); z-index: 1;
+}
+table.data th.sorted { color: var(--ink); }
+table.data th.sorted::after { content: " ↓"; }
+table.data th.sorted.asc::after { content: " ↑"; }
+table.data td.n, table.data th.n { text-align: right; font-variant-numeric: tabular-nums; }
+table.data tbody tr { cursor: pointer; }
+table.data tbody tr:hover { background: var(--wash); }
+.tbl-wrap { overflow-x: auto; }
+.minibar { display: flex; height: 8px; width: 84px; border-radius: 0 3px 3px 0; }
+.minibar i { height: 100%; box-shadow: 2px 0 0 0 var(--surface); }
+.minibar i:last-child { box-shadow: none; border-radius: 0 3px 3px 0; }
+details.plain > summary {
+  list-style: none; cursor: pointer; font-size: 12.5px; color: var(--ink-2);
+  display: inline-flex; align-items: center; gap: 7px;
+  border: 1px solid var(--border); background: var(--surface); border-radius: 999px; padding: 5px 13px;
+}
+details.plain > summary::-webkit-details-marker { display: none; }
+details.plain > summary::before { content: "▸"; color: var(--muted); font-size: 11px; }
+details.plain[open] > summary::before { content: "▾"; }
+details.plain > summary:hover { background: var(--wash); }
+details.plain .card { margin-top: 14px; padding: 6px 10px; }
+
+/* ---------- filters ---------- */
+.filters {
+  position: sticky; top: 53px; z-index: 20;
+  display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center;
+  background: var(--glass); backdrop-filter: saturate(180%) blur(14px);
+  border: 1px solid var(--border); border-radius: var(--r);
+  padding: 12px 15px; margin-bottom: 16px; box-shadow: var(--shadow);
+}
+.filters label.f { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--muted); }
+.filters select, .filters input[type=search] {
+  font: inherit; font-size: 13px; color: var(--ink); background: var(--surface);
+  border: 1px solid var(--border); border-radius: 7px; padding: 6px 9px;
+}
+.filters input[type=search] { min-width: 200px; }
+.toggles { display: inline-flex; gap: 6px; }
+.toggles button {
+  font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+  padding: 5px 12px; border-radius: 999px; color: var(--muted);
+  border: 1px solid var(--border); background: var(--surface);
+  display: inline-flex; align-items: center; gap: 7px;
+}
+.toggles button .sw { opacity: 0.35; }
+.toggles button[aria-pressed="true"] { color: var(--ink); border-color: var(--baseline); background: var(--surface-2); }
+.toggles button[aria-pressed="true"] .sw { opacity: 1; }
+.btn {
+  font: inherit; font-size: 12.5px; cursor: pointer; padding: 6px 12px;
+  border-radius: 7px; border: 1px solid var(--border); background: var(--surface); color: var(--ink-2);
+}
+.btn:hover { background: var(--wash); color: var(--ink); }
+.fcount { margin-left: auto; font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* ---------- feature drill-down ---------- */
+details.feat {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r); margin-bottom: 12px; box-shadow: var(--shadow);
+  scroll-margin-top: 130px;
+}
+details.feat[open] { border-color: var(--baseline); }
+details.feat > summary {
+  list-style: none; cursor: pointer; padding: 16px 20px;
+  display: flex; align-items: center; gap: 13px; flex-wrap: wrap; border-radius: var(--r);
+}
+details.feat > summary::-webkit-details-marker { display: none; }
+details.feat > summary::before {
+  content: "▸"; color: var(--muted); font-size: 12px; flex: none; transition: transform .14s;
+}
+details.feat[open] > summary::before { transform: rotate(90deg); }
+details.feat > summary:hover { background: var(--wash); }
+.feat .fname { font-weight: 650; font-size: 15.5px; letter-spacing: -0.01em; }
+.feat .counts { margin-left: auto; display: flex; gap: 14px; align-items: center; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.feat .counts .fmatch:not(:empty) { color: var(--accent); font-weight: 650; }
+.feat .body { padding: 6px 20px 22px; border-top: 1px solid var(--grid); }
+.feat .body > .sub { margin-top: 20px; }
+.sub > h4 {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.09em;
+  color: var(--muted); margin-bottom: 9px; font-weight: 650;
+}
+.kv { display: grid; grid-template-columns: 132px 1fr; gap: 6px 14px; font-size: 13px; }
+.kv dt { color: var(--muted); font-size: 11.5px; padding-top: 2px; text-transform: uppercase; letter-spacing: 0.05em; }
+.kv dd { margin: 0; }
+.paths { display: flex; flex-wrap: wrap; gap: 5px 6px; }
+.paths code {
+  background: var(--surface-2); border: 1px solid var(--border-2);
+  border-radius: 5px; padding: 2px 6px; word-break: break-all; color: var(--ink-2);
+}
+ul.flows { list-style: none; margin: 0; padding: 0; }
+ul.flows li { display: flex; gap: 12px; align-items: baseline; padding: 7px 0; border-bottom: 1px solid var(--grid); font-size: 13.5px; }
+ul.flows li:last-child { border-bottom: none; }
+ul.flows .fbreak { color: var(--ink-2); font-size: 12.5px; margin-top: 2px; }
+
+/* ---------- finding cards ---------- */
+.find {
+  border: 1px solid var(--border); border-left-width: 3px; border-radius: var(--r-sm);
+  padding: 13px 15px; margin-bottom: 9px; background: var(--surface);
+}
+.find.k-bug { border-left-color: var(--kind-bug); }
+.find.k-bug.s-critical { border-left-color: var(--sev-critical); }
+.find.k-bug.s-high { border-left-color: var(--sev-high); }
+.find.k-bug.s-medium { border-left-color: var(--sev-medium); }
+.find.k-bug.s-low { border-left-color: var(--sev-low); }
+.find.k-gap { border-left-color: var(--kind-gap); }
+.find.k-opp { border-left-color: var(--kind-opp); }
+.find .fhead { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.find .ftitle { font-weight: 650; font-size: 14px; letter-spacing: -0.005em; }
+.find .fid { font-family: var(--mono); font-size: 10.5px; color: var(--muted); margin-left: auto; }
+.find .fbody { margin-top: 9px; font-size: 13.5px; color: var(--ink-2); }
+.find .fbody p { margin: 0 0 7px; }
+.find .flabel {
+  color: var(--muted); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.07em;
+  font-weight: 650; margin-right: 3px;
+}
+.find .ev { margin-top: 10px; }
+
+/* ---------- lists ---------- */
+ol.seq { margin: 0; padding-left: 0; list-style: none; counter-reset: s; }
+ol.seq li { counter-increment: s; display: flex; gap: 14px; padding: 11px 0; border-bottom: 1px solid var(--grid); font-size: 13.5px; }
+ol.seq li:last-child { border-bottom: none; }
+ol.seq li::before {
+  content: counter(s); flex: none; width: 24px; height: 24px; border-radius: 50%;
+  background: var(--accent-soft); border: 1px solid var(--border-2);
+  display: grid; place-items: center; font-size: 11.5px; font-weight: 650; color: var(--accent);
+}
+ul.tops { margin: 0; padding: 0; list-style: none; }
+ul.tops li { padding: 11px 0; border-bottom: 1px solid var(--grid); font-size: 13.5px; display: flex; gap: 11px; }
+ul.tops li:last-child { border-bottom: none; }
+ul.tops .ref {
+  font-family: var(--mono); font-size: 11px; color: var(--accent);
+  border: 1px solid var(--border); background: var(--surface-2);
+  border-radius: 5px; padding: 2px 6px; flex: none; align-self: flex-start;
+}
+.xc { margin-bottom: 12px; }
+.xc .xhead { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.xc .xtitle { font-weight: 650; font-size: 14.5px; }
+
+/* ---------- tooltip ---------- */
+#tip {
+  position: fixed; z-index: 60; pointer-events: none; opacity: 0;
+  transition: opacity .12s; max-width: 270px;
+  background: var(--ink); color: var(--page); font-size: 12px; line-height: 1.45;
+  padding: 8px 10px; border-radius: 7px; box-shadow: 0 6px 20px rgba(0,0,0,0.22);
+  font-weight: 500;
+}
+#tip.on { opacity: 1; }
+
+footer {
+  margin-top: 72px; padding-top: 22px; border-top: 1px solid var(--grid);
+  font-size: 12px; color: var(--muted); display: flex; gap: 16px; flex-wrap: wrap;
+}
+
+/* ---------- motion ---------- */
+@keyframes grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.stack .seg { animation: grow .55s cubic-bezier(.2,.7,.3,1) both; }
+.tile, .fcard { animation: fade .4s ease both; }
+.gauge circle.anim { transition: stroke-dashoffset 1s cubic-bezier(.2,.7,.3,1); }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .stack .seg, .tile, .fcard { animation: none; }
+  .gauge circle.anim { transition: none; }
+  .tile:hover, .fcard:hover { transform: none; }
+}
+
+@media (max-width: 900px) {
+  .cover-grid { grid-template-columns: 1fr; gap: 34px; }
+  .grid2 { grid-template-columns: 1fr; }
+  nav.jump { display: none; }
+}
+@media (max-width: 620px) {
+  .wrap { padding: 0 16px 80px; }
+  .topbar .inner { padding: 10px 16px; }
+  .row { grid-template-columns: 104px 1fr 30px; gap: 10px; }
+  .kv { grid-template-columns: 1fr; }
+  .find .fid { margin-left: 0; }
+}
+@media print {
+  .topbar, .filters, .toggles, .iconbtn { display: none !important; }
+  .cover::before { display: none; }
+  .card, .tile, .fcard, details.feat { box-shadow: none; }
+  details.feat, .fcard, .tile { break-inside: avoid; }
+  details.feat > .body { display: block !important; }
+}
+</style>
+</head>
+<body>
+<script id="recon-data" type="application/json">{"project":null,"features":[]}</script>
+
+<div class="topbar"><div class="inner" id="topbar"></div></div>
+<div class="wrap" id="app"></div>
+<div id="tip" role="tooltip"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  var DATA = JSON.parse(document.getElementById("recon-data").textContent || "{}");
+  var P = DATA.project || null;
+  var FEATURES = DATA.features || [];
+  var app = document.getElementById("app");
+  var bar = document.getElementById("topbar");
+
+  if (!P || !FEATURES.length) {
+    app.innerHTML = '<div class="cover"><div class="eyebrow">Feature recon</div>' +
+      "<h1>No data yet</h1><p class=\"lede\">Run <code>build_report.py &lt;recon-dir&gt;</code> " +
+      "to embed a sweep into this report.</p></div>";
+    return;
+  }
+
+  var MATURITY = ["missing", "stub", "alpha", "beta", "production_ready"];
+  var MAT_LABEL = { missing: "Missing", stub: "Stub", alpha: "Alpha", beta: "Beta",
+                    production_ready: "Production ready" };
+  var SEVERITY = ["critical", "high", "medium", "low"];
+  var SEV_LABEL = { critical: "Critical", high: "High", medium: "Medium", low: "Low" };
+  var FLOW_LABEL = { working: "Working", partial: "Partial", broken: "Broken",
+                     not_implemented: "Not implemented" };
+  var KIND_LABEL = { bug: "Bug", gap: "Gap", opp: "Opportunity" };
+  var KIND_PLURAL = { bug: "Bugs", gap: "Gaps", opp: "Opportunities" };
+  var EFFORT = ["S", "M", "L"];
+  var EFFORT_LABEL = { S: "S · <1d", M: "M · 1-3d", L: "L · >3d" };
+  var PRIORITY = ["P0", "P1", "P2", "P3"];
+  var T = P.totals || {};
+
+  /* ---------- helpers ---------- */
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  function plural(n, one, many) { return n + " " + (n === 1 ? one : many || one + "s"); }
+  function list(x) { return Array.isArray(x) ? x : (x ? [x] : []); }
+  function tip(text) { return ' data-tip="' + esc(text) + '"'; }
+  function pct(n, d) { return d ? (n / d) * 100 : 0; }
+
+  function paths(arr) {
+    arr = list(arr);
+    if (!arr.length) return '<span class="faint tiny">—</span>';
+    return '<div class="paths">' + arr.map(function (p) {
+      return "<code>" + esc(p) + "</code>";
+    }).join("") + "</div>";
+  }
+  /* Density step for a heat cell: 0 stays near-surface, the rest span the ramp. */
+  function densityClass(n, max) {
+    if (!n) return "d0";
+    return "d" + Math.max(1, Math.ceil((n / (max || 1)) * 5));
+  }
+
+  /* ---------- topbar ---------- */
+  function topbar() {
+    return '<div class="brand"><span class="glyph">R</span>' +
+        "<span>" + esc(P.project_name || "Project") + "</span>" +
+        '<span class="sep">/</span><span class="sub">feature recon</span></div>' +
+      '<nav class="jump">' +
+        ['<a href="#overview">Overview</a>', '<a href="#findings">Findings</a>',
+         '<a href="#planning">Planning</a>', '<a href="#features">Features</a>'].join("") +
+      "</nav>" +
+      '<button class="iconbtn" id="theme" title="Toggle light / dark" aria-label="Toggle light or dark theme">◐</button>';
+  }
+
+  /* ---------- cover ---------- */
+  function cover() {
+    var by = T.by_maturity || {};
+    var total = MATURITY.reduce(function (n, m) { return n + (by[m] || 0); }, 0) || 1;
+    var ready = by.production_ready || 0;
+    var betaPlus = ready + (by.beta || 0);
+    var readyPct = Math.round(pct(ready, total));
+    var betaPct = Math.round(pct(betaPlus, total));
+
+    var R1 = 78, R2 = 58, C1 = 2 * Math.PI * R1, C2 = 2 * Math.PI * R2;
+    var gauge =
+      '<svg width="188" height="188" viewBox="0 0 188 188" role="img" aria-label="' +
+        betaPct + '% of features are beta or better; ' + readyPct + '% are production-ready">' +
+        '<circle class="ring-track" cx="94" cy="94" r="' + R1 + '" stroke-width="13"></circle>' +
+        '<circle class="ring-track" cx="94" cy="94" r="' + R2 + '" stroke-width="13"></circle>' +
+        '<circle class="ring-beta anim" cx="94" cy="94" r="' + R1 + '" stroke-width="13"' +
+          ' stroke-dasharray="' + C1.toFixed(1) + '" stroke-dashoffset="' + C1.toFixed(1) + '"' +
+          ' data-off="' + (C1 * (1 - betaPlus / total)).toFixed(1) + '"></circle>' +
+        '<circle class="ring-prod anim" cx="94" cy="94" r="' + R2 + '" stroke-width="13"' +
+          ' stroke-dasharray="' + C2.toFixed(1) + '" stroke-dashoffset="' + C2.toFixed(1) + '"' +
+          ' data-off="' + (C2 * (1 - ready / total)).toFixed(1) + '"></circle>' +
+        '<text x="94" y="90" text-anchor="middle" class="hero-fig" fill="currentColor">' +
+          readyPct + '%</text>' +
+        '<text x="94" y="110" text-anchor="middle" class="hero-cap" fill="currentColor">' +
+          "production-ready</text>" +
+      "</svg>" +
+      '<div class="gl">' +
+        '<span><i class="sw" style="background:var(--mat-production_ready)"></i>' +
+          "<b>" + ready + "</b> production-ready</span>" +
+        '<span><i class="sw" style="background:var(--mat-alpha)"></i>' +
+          "<b>" + betaPlus + "</b> beta or better</span>" +
+        '<span><i class="sw" style="background:var(--seq-1)"></i>' +
+          "<b>" + (total - betaPlus) + "</b> below beta</span>" +
+      "</div>";
+
+    var blind = FEATURES.reduce(function (n, f) {
+      return n + list((f.coverage || {}).not_inspected).length;
+    }, 0);
+
+    return '<div class="cover" id="overview"><div class="cover-grid"><div>' +
+        '<div class="eyebrow">Feature reconnaissance</div>' +
+        "<h1>" + esc(P.project_name || "Untitled project") + "</h1>" +
+        '<p class="lede">' + plural(T.features || FEATURES.length, "feature") + " swept, " +
+          plural(T.bugs || 0, "bug") + ", " + plural(T.gaps || 0, "gap") + " and " +
+          plural(T.opportunities || 0, "opportunity", "opportunities") +
+          " recorded — every one of them citing the file and line it came from.</p>" +
+        '<div class="stampline">' +
+          (P.reviewed_at ? '<span class="stamp">Swept <b>' + esc(P.reviewed_at) + "</b></span>" : "") +
+          (P.git_commit ? '<span class="stamp">Commit <b class="mono">' + esc(P.git_commit) +
+            "</b></span>" : "") +
+          '<span class="stamp">Static read · no runtime</span>' +
+          (blind ? '<span class="stamp"><b>' + blind + "</b> areas not inspected</span>" : "") +
+        "</div>" +
+      '</div><div class="gauge">' + gauge + "</div></div>" +
+      '<div class="notice"><b>This is reconnaissance, not ground truth.</b> ' +
+        "Findings come from reading the code, not running it — so nothing here depends on a test " +
+        "passing, and anything the sweep could not read is listed per feature under " +
+        "<i>Not inspected</i>. " + (P.method ? esc(P.method) : "") + "</div>" +
+      "</div>";
+  }
+
+  function section(id, title, cap, body) {
+    return '<section class="sec" id="' + id + '"><header class="sh"><h2>' + title + "</h2>" +
+      (cap ? '<div class="cap">' + cap + "</div>" : "") + "</header>" + body + "</section>";
+  }
+
+  /* ---------- maturity band ---------- */
+  function maturityBand() {
+    var by = T.by_maturity || {};
+    var total = MATURITY.reduce(function (n, m) { return n + (by[m] || 0); }, 0) || 1;
+    var segs = MATURITY.map(function (m, i) {
+      var n = by[m] || 0, p = pct(n, total);
+      return '<div class="seg m-' + m + (n ? "" : " z") + '" style="width:' + p.toFixed(3) +
+        "%;animation-delay:" + (i * 60) + 'ms"' +
+        tip(MAT_LABEL[m] + " — " + plural(n, "feature") + " (" + Math.round(p) + "%)") +
+        ">" + (p >= 9 ? n : "") + "</div>";
+    }).join("");
+    var legend = MATURITY.map(function (m) {
+      return '<span class="key' + ((by[m] || 0) ? "" : " off") +
+        '"><i class="sw" style="background:var(--mat-' + m + ')"></i>' + MAT_LABEL[m] +
+        ' <span class="num">' + (by[m] || 0) + "</span></span>";
+    }).join("");
+    return section("maturity", "Maturity mix",
+      "stub → production-ready, left to right",
+      '<div class="card maturity-band"><div class="stack">' + segs + "</div>" +
+      '<div class="legend">' + legend + "</div></div>");
+  }
+
+  /* ---------- stat tiles ---------- */
+  function tiles() {
+    var sev = T.bugs_by_severity || {};
+    var noTests = list(T.features_without_tests);
+    var lowConf = FEATURES.filter(function (f) { return f.confidence === "low"; });
+    var broken = FEATURES.reduce(function (n, f) {
+      return n + ((f.counts || {}).flows_broken || 0);
+    }, 0);
+    var items = [
+      { v: sev.critical || 0, l: "Critical bugs", c: "--sev-critical",
+        sub: sev.critical ? "data loss, security, or a dead primary flow" : "none found" },
+      { v: sev.high || 0, l: "High bugs", c: "--sev-high",
+        sub: (sev.medium || 0) + " medium · " + (sev.low || 0) + " low" },
+      { v: broken, l: "Flows that don't complete", c: "--sev-medium",
+        sub: "broken or never implemented" },
+      { v: noTests.length, l: "Features without tests", c: noTests.length ? "--sev-high" : "--st-good",
+        sub: noTests.length ? noTests.slice(0, 3).join(", ") +
+          (noTests.length > 3 ? " +" + (noTests.length - 3) + " more" : "")
+          : "every feature has tests" },
+      { v: lowConf.length, l: "Low-confidence reads", c: "--muted",
+        sub: lowConf.length ? "inferred from partial reading" : "all features read directly" }
+    ];
+    return '<section class="sec" id="findings"><header class="sh"><h2>Headline numbers</h2>' +
+      '<div class="cap">' + (T.bugs || 0) + " bugs · " + (T.gaps || 0) + " gaps · " +
+      (T.opportunities || 0) + ' opportunities</div></header><div class="tiles">' +
+      items.map(function (i, n) {
+        return '<div class="tile" style="--tc:var(' + i.c + ');animation-delay:' + (n * 55) + 'ms">' +
+          '<div class="v num">' + i.v + "</div>" +
+          '<div class="l"><i class="dot" style="background:var(' + i.c + ')"></i>' + i.l + "</div>" +
+          '<div class="sub">' + esc(i.sub) + "</div></div>";
+      }).join("") + "</div></section>";
+  }
+
+  /* ---------- verdict ---------- */
+  function verdict() {
+    if (!P.summary) return "";
+    return section("verdict", "The verdict", "",
+      '<div class="card"><div class="verdict">' +
+      esc(P.summary).split(/\n\s*\n/).map(function (p) { return "<p>" + p + "</p>"; }).join("") +
+      "</div></div>");
+  }
+
+  /* ---------- bugs by feature ---------- */
+  function severityChart() {
+    var rows = FEATURES.map(function (f) {
+      var c = f.counts || {}, bs = c.bugs_by_severity || {};
+      return { name: f.name || f.slug, slug: f.slug, total: c.bugs || 0, bs: bs,
+               weight: (bs.critical || 0) * 1000 + (bs.high || 0) * 100 +
+                       (bs.medium || 0) * 10 + (bs.low || 0) };
+    }).sort(function (a, b) { return b.weight - a.weight || b.total - a.total; });
+    var max = Math.max.apply(null, rows.map(function (r) { return r.total; }).concat([1]));
+
+    var body = rows.map(function (r, i) {
+      var segs = SEVERITY.map(function (s) {
+        var n = r.bs[s] || 0;
+        if (!n) return "";
+        return '<div class="seg" style="width:' + pct(n, r.total).toFixed(3) +
+          "%;background:var(--sev-" + s + ");animation-delay:" + (i * 22) + 'ms"' +
+          tip(r.name + " — " + plural(n, SEV_LABEL[s].toLowerCase() + " bug")) + "></div>";
+      }).join("");
+      return '<a class="row" href="#' + esc(r.slug) + '"><div class="rlabel">' + esc(r.name) +
+        '</div><div class="track"><div class="stack" style="width:' +
+          pct(r.total, max).toFixed(3) + '%">' + segs + "</div></div>" +
+        '<div class="rval">' + (r.total || "—") + "</div></a>";
+    }).join("");
+
+    var legend = SEVERITY.map(function (s) {
+      return '<span class="key"><i class="sw" style="background:var(--sev-' + s + ')"></i>' +
+        SEV_LABEL[s] + ' <span class="num">' + ((T.bugs_by_severity || {})[s] || 0) +
+        "</span></span>";
+    }).join("");
+
+    return section("bugs", "Bugs by feature", "ordered by severity weight",
+      '<div class="card"><div class="rows">' + body + "</div>" +
+      '<div class="legend">' + legend + "</div>" +
+      '<div class="axis-note">Bar length is the bug count (longest ' + max +
+      "). Order is by severity weight rather than count, so a feature with fewer but more severe " +
+      "bugs ranks higher. Gaps and opportunities are counted separately — see Planning.</div></div>");
+  }
+
+  /* ---------- planning grids ---------- */
+  function heatGrid(colKeys, colLabels, rowKeys, rowLabels, cell, caption) {
+    var max = 0;
+    rowKeys.forEach(function (r) {
+      colKeys.forEach(function (c) { max = Math.max(max, cell(r, c).length); });
+    });
+    var html = '<div class="heat" style="grid-template-columns:64px repeat(' + colKeys.length +
+      ',1fr)"><div></div>' +
+      colKeys.map(function (c) { return '<div class="hlab">' + colLabels[c] + "</div>"; }).join("");
+    rowKeys.forEach(function (r) {
+      html += '<div class="hlab row-lab">' + rowLabels[r] + "</div>";
+      colKeys.forEach(function (c) {
+        var items = cell(r, c);
+        html += '<div class="hc ' + densityClass(items.length, max) + '"' +
+          tip(rowLabels[r] + " × " + colLabels[c] + " — " + plural(items.length, "finding") +
+              (items.length ? ": " + items.slice(0, 3).join("; ") +
+                (items.length > 3 ? " …" : "") : "")) +
+          ">" + (items.length || "") + "</div>";
+      });
+    });
+    html += "</div>";
+    return html + (caption ? '<div class="axis-note">' + caption + "</div>" : "");
+  }
+
+  function planning() {
+    var bugs = [], plan = [];
+    FEATURES.forEach(function (f) {
+      list(f.bugs).forEach(function (b) { bugs.push({ f: f, x: b, sev: b.severity, eff: b.effort }); });
+      list(f.gaps).forEach(function (g) { plan.push({ f: f, x: g, pri: g.priority, eff: g.effort }); });
+      list(f.opportunities).forEach(function (o) {
+        plan.push({ f: f, x: o, pri: o.priority, eff: o.effort });
+      });
+    });
+
+    var effLabels = { S: "S", M: "M", L: "L" };
+    var sevLabels = {}, priLabels = {};
+    SEVERITY.forEach(function (s) { sevLabels[s] = SEV_LABEL[s]; });
+    PRIORITY.forEach(function (p) { priLabels[p] = p; });
+
+    var left = heatGrid(EFFORT, effLabels, SEVERITY, sevLabels, function (sev, eff) {
+      return bugs.filter(function (b) { return b.sev === sev && b.eff === eff; })
+                 .map(function (b) { return b.x.title; });
+    }, "Bugs by severity and effort. The top-left cell is where to start: severe and cheap. " +
+       "S &lt;1d · M 1-3d · L &gt;3d.");
+
+    var right = heatGrid(EFFORT, effLabels, PRIORITY, priLabels, function (pri, eff) {
+      return plan.filter(function (p) { return p.pri === pri && p.eff === eff; })
+                 .map(function (p) { return p.x.title; });
+    }, "Gaps and opportunities by priority and effort. Bugs are ranked by severity instead, " +
+       "so they are in the grid on the left.");
+
+    return section("planning", "Planning", "count per cell · darker means more work pooled there",
+      '<div class="grid2"><div class="card"><h3 style="font-size:14px;margin-bottom:14px">' +
+      "Bugs · severity × effort</h3>" + left + "</div>" +
+      '<div class="card"><h3 style="font-size:14px;margin-bottom:14px">' +
+      "Gaps &amp; opportunities · priority × effort</h3>" + right + "</div></div>");
+  }
+
+  /* ---------- dependency matrix ---------- */
+  function dependencies() {
+    var slugs = FEATURES.map(function (f) { return f.slug; });
+    var names = {};
+    FEATURES.forEach(function (f) { names[f.slug] = f.name || f.slug; });
+    var deps = {};
+    var any = 0;
+    FEATURES.forEach(function (f) {
+      deps[f.slug] = {};
+      list(f.dependencies).forEach(function (d) {
+        if (slugs.indexOf(d) >= 0) { deps[f.slug][d] = 1; any++; }
+      });
+    });
+    if (!any || slugs.length > 26) return "";
+
+    var head = '<tr><th></th>' + slugs.map(function (s) {
+      return '<th class="col"><span>' + esc(names[s]) + "</span></th>";
+    }).join("") + "</tr>";
+
+    var body = slugs.map(function (r) {
+      return '<tr><th class="rowh">' + esc(names[r]) + "</th>" + slugs.map(function (c) {
+        if (r === c) return '<td><i class="self"></i></td>';
+        var on = deps[r][c];
+        return "<td>" + (on
+          ? '<i class="on"' + tip(names[r] + " depends on " + names[c]) + "></i>"
+          : '<i></i>') + "</td>";
+      }).join("") + "</tr>";
+    }).join("");
+
+    var leaders = slugs.map(function (s) {
+      return { s: s, n: slugs.filter(function (r) { return deps[r][s]; }).length };
+    }).sort(function (a, b) { return b.n - a.n; }).filter(function (x) { return x.n; }).slice(0, 3);
+
+    return section("deps", "Dependency map",
+      "row depends on column · " + plural(any, "edge"),
+      '<div class="card"><div class="dep"><table>' + head + body + "</table></div>" +
+      '<div class="axis-note">' + (leaders.length
+        ? "Most depended-on: " + leaders.map(function (l) {
+            return "<b>" + esc(names[l.s]) + "</b> (" + l.n + ")";
+          }).join(", ") + ". Breaking these breaks the most surface area."
+        : "No feature is depended on by another.") + "</div></div>");
+  }
+
+  /* ---------- cross-cutting ---------- */
+  function crossCutting() {
+    var xs = list(P.cross_cutting);
+    if (!xs.length) return "";
+    return section("xc", "Cross-cutting", "one root cause, many features",
+      xs.map(function (x) {
+        var sev = SEVERITY.indexOf(x.severity) >= 0 ? x.severity : "medium";
+        return '<div class="card xc"><div class="xhead">' +
+          '<span class="chip"><i class="sw" style="background:var(--sev-' + sev + ')"></i>' +
+            esc(SEV_LABEL[sev]) + "</span>" +
+          '<span class="pill">' + esc(KIND_LABEL[x.type] || x.type || "finding") + "</span>" +
+          '<span class="xtitle">' + esc(x.title) + "</span>" +
+          '<span class="fid mono faint" style="margin-left:auto">' + esc(x.id || "") + "</span></div>" +
+          (x.suggested_fix ? '<div class="fbody small dim" style="margin-top:9px">' +
+            esc(x.suggested_fix) + "</div>" : "") +
+          '<div class="chips">' + list(x.affects).map(function (a) {
+            return '<a class="chip plain" href="#' + esc(a) + '">' + esc(a) + "</a>";
+          }).join("") + "</div>" +
+          '<div class="ev" style="margin-top:10px">' + paths(x.evidence) + "</div></div>";
+      }).join(""));
+  }
+
+  /* ---------- top findings + sequence ---------- */
+  function priorities() {
+    var tops = list(P.top_findings), seq = list(P.recommended_sequence);
+    if (!tops.length && !seq.length) return "";
+    var left = tops.length
+      ? '<div class="card"><h3 style="font-size:14px;margin-bottom:12px">Biggest findings</h3>' +
+        '<ul class="tops">' + tops.map(function (t) {
+          return '<li><a class="ref" href="#' + esc(t.feature || "") + '">' + esc(t.ref || "") +
+            '</a><span class="dim">' + esc(t.why || "") + "</span></li>";
+        }).join("") + "</ul></div>"
+      : "";
+    var right = seq.length
+      ? '<div class="card"><h3 style="font-size:14px;margin-bottom:12px">Recommended sequence</h3>' +
+        '<ol class="seq">' + seq.map(function (s) {
+          return "<li><div><b>" + esc(s.action) + "</b>" +
+            (s.effort ? ' <span class="pill">' + esc(s.effort) + "</span>" : "") +
+            '<div class="dim small">' + esc(s.rationale || "") + "</div></div></li>";
+        }).join("") + "</ol></div>"
+      : "";
+    return section("next", "Where to start", "severity × blast radius",
+      '<div class="grid2">' + left + right + "</div>");
+  }
+
+  /* ---------- feature health grid ---------- */
+  function featureGrid() {
+    var maxBugs = Math.max.apply(null, FEATURES.map(function (f) {
+      return (f.counts || {}).bugs || 0;
+    }).concat([1]));
+
+    var cards = FEATURES.map(function (f, i) {
+      var c = f.counts || {}, bs = c.bugs_by_severity || {};
+      var segs = SEVERITY.map(function (s) {
+        var n = bs[s] || 0;
+        return n ? '<i style="width:' + pct(n, c.bugs).toFixed(2) +
+          "%;background:var(--sev-" + s + ')"></i>' : "";
+      }).join("");
+      var tests = c.test_files || 0;
+      return '<button class="fcard" data-goto="' + esc(f.slug) + '" style="animation-delay:' +
+          (i * 28) + 'ms">' +
+        '<div class="fh"><i class="mdot" style="background:var(--mat-' + esc(f.maturity) + ')"></i>' +
+          '<span class="fn">' + esc(f.name || f.slug) + "</span>" +
+          '<span class="tests' + (tests ? "" : " none") + '">' +
+            (tests ? plural(tests, "test") : "no tests") + "</span></div>" +
+        '<div class="matline"><span class="mat">' +
+          esc(MAT_LABEL[f.maturity] || f.maturity) + "</span></div>" +
+        '<div class="bar" style="width:' + Math.max(8, pct(c.bugs || 0, maxBugs)).toFixed(1) + '%"' +
+          tip((c.bugs || 0) ? plural(c.bugs, "bug") + " — " + SEVERITY.filter(function (s) {
+            return bs[s];
+          }).map(function (s) { return bs[s] + " " + s; }).join(", ") : "no bugs found") +
+          ">" + segs + "</div>" +
+        '<div class="meta">' +
+          "<span><b>" + (c.bugs || 0) + "</b> bugs</span>" +
+          "<span><b>" + (c.gaps || 0) + "</b> gaps</span>" +
+          "<span><b>" + (c.opportunities || 0) + "</b> opps</span>" +
+          (c.flows_broken ? "<span><b>" + c.flows_broken + "</b> " +
+            (c.flows_broken === 1 ? "flow" : "flows") + " at risk</span>" : "") +
+        "</div></button>";
+    }).join("");
+
+    return section("features", "Features", "click a card to open its full read",
+      '<div class="fgrid">' + cards + "</div>" +
+      '<div style="margin-top:18px">' + dataTable() + "</div>");
+  }
+
+  /* ---------- data table (the non-visual view) ---------- */
+  function dataTable() {
+    var maxBugs = Math.max.apply(null, FEATURES.map(function (f) {
+      return (f.counts || {}).bugs || 0;
+    }).concat([1]));
+    var head = [
+      ["Feature", "s", "name"], ["Maturity", "s", "maturity"], ["Confidence", "s", "confidence"],
+      ["Bugs", "n", "bugs"], ["", "", ""], ["Gaps", "n", "gaps"],
+      ["Opps", "n", "opportunities"], ["Tests", "n", "test_files"]
+    ].map(function (h, i) {
+      return "<th" + (h[1] === "n" ? ' class="n"' : "") +
+        (h[2] ? ' data-sort="' + h[2] + '" data-i="' + i + '"' : "") + ">" + h[0] + "</th>";
+    }).join("");
+
+    var body = FEATURES.map(function (f) {
+      var c = f.counts || {}, bs = c.bugs_by_severity || {};
+      var mini = SEVERITY.map(function (s) {
+        var n = bs[s] || 0;
+        return n ? '<i style="width:' + pct(n, c.bugs).toFixed(2) +
+          "%;background:var(--sev-" + s + ')"></i>' : "";
+      }).join("");
+      return '<tr data-slug="' + esc(f.slug) + '" data-maturity="' + esc(f.maturity) + '"' +
+          ' data-name="' + esc(f.name || f.slug) + '" data-confidence="' + esc(f.confidence) + '"' +
+          ' data-bugs="' + (c.bugs || 0) + '" data-gaps="' + (c.gaps || 0) + '"' +
+          ' data-opportunities="' + (c.opportunities || 0) + '"' +
+          ' data-test_files="' + (c.test_files || 0) + '">' +
+        "<td><b>" + esc(f.name || f.slug) + "</b></td>" +
+        '<td><span class="chip"><i class="sw" style="background:var(--mat-' + esc(f.maturity) +
+          ')"></i>' + esc(MAT_LABEL[f.maturity] || f.maturity) + "</span></td>" +
+        '<td class="small dim">' + esc(f.confidence || "") + "</td>" +
+        '<td class="n">' + (c.bugs || 0) + "</td>" +
+        '<td><div class="minibar" style="width:' + pct(c.bugs || 0, maxBugs).toFixed(1) +
+          '%">' + mini + "</div></td>" +
+        '<td class="n">' + (c.gaps || 0) + "</td>" +
+        '<td class="n">' + (c.opportunities || 0) + "</td>" +
+        '<td class="n">' + ((c.test_files || 0) ? c.test_files
+          : '<b style="color:var(--sev-high)">0</b>') + "</td></tr>";
+    }).join("");
+
+    return '<details class="plain"><summary>Data table — every feature, sortable</summary>' +
+      '<div class="card tbl-wrap"><table class="data" id="matrix"><thead><tr>' + head +
+      "</tr></thead><tbody>" + body + "</tbody></table></div></details>";
+  }
+
+  /* ---------- filters ---------- */
+  function filters() {
+    var opts = function (vals, labels) {
+      return vals.map(function (v) {
+        return '<option value="' + esc(v) + '">' + (labels ? labels[v] || v : v) + "</option>";
+      }).join("");
+    };
+    return '<div class="filters" id="filters">' +
+      '<div class="toggles" id="kinds">' +
+        ["bug", "gap", "opp"].map(function (k) {
+          return '<button data-kind="' + k + '" aria-pressed="true">' +
+            '<i class="sw" style="background:var(--kind-' + k + ')"></i>' +
+            KIND_PLURAL[k] + "</button>";
+        }).join("") +
+      "</div>" +
+      '<label class="f">Severity <select id="f-sev"><option value="all">any</option>' +
+        opts(SEVERITY, SEV_LABEL) + "</select></label>" +
+      '<label class="f">Maturity <select id="f-mat"><option value="all">any</option>' +
+        opts(MATURITY, MAT_LABEL) + "</select></label>" +
+      '<label class="f">Effort <select id="f-eff"><option value="all">any</option>' +
+        opts(EFFORT, EFFORT_LABEL) + "</select></label>" +
+      '<label class="f">Priority <select id="f-pri"><option value="all">any</option>' +
+        opts(PRIORITY) + "</select></label>" +
+      '<input type="search" id="f-q" placeholder="Search titles, files, text…  (/)" ' +
+        'aria-label="Search findings">' +
+      '<button class="btn" id="expand">Expand all</button>' +
+      '<button class="btn" id="copy">Copy JSON</button>' +
+      '<span class="fcount" id="fcount"></span></div>';
+  }
+
+  /* ---------- finding card ---------- */
+  function finding(kind, f, feature) {
+    var sev = kind === "bug" ? (f.severity || "medium") : "";
+    var text = [f.title, f.description, f.repro, f.impact, f.expected_by, f.suggested_fix]
+      .concat(list(f.evidence)).join(" ").toLowerCase();
+    var chips = ['<span class="pill">' + KIND_LABEL[kind] + "</span>"];
+    if (kind === "bug") {
+      chips.push('<span class="chip"><i class="sw" style="background:var(--sev-' + sev +
+        ')"></i>' + esc(SEV_LABEL[sev] || sev) + "</span>");
+      if (f.type) chips.push('<span class="pill">' + esc(f.type.replace(/_/g, " ")) + "</span>");
+    }
+    if (kind === "gap" && f.kind) {
+      chips.push('<span class="pill">' + esc(f.kind.replace(/_/g, " ")) + "</span>");
+    }
+    if (kind === "opp" && f.value) {
+      chips.push('<span class="pill">' + esc(f.value) + " value</span>");
+    }
+    if (f.priority) chips.push('<span class="pill">' + esc(f.priority) + "</span>");
+    if (f.effort) chips.push('<span class="pill">' + esc(f.effort) + "</span>");
+
+    var rows = [
+      ["", f.description], ["Repro", f.repro], ["Impact", f.impact],
+      ["Expected by", f.expected_by], ["Blocks", list(f.blocks).join(", ")], ["Fix", f.suggested_fix]
+    ].filter(function (r) { return r[1]; }).map(function (r) {
+      return "<p>" + (r[0] ? '<span class="flabel">' + r[0] + "</span>" : "") + esc(r[1]) + "</p>";
+    }).join("");
+
+    return '<div class="find k-' + kind + (sev ? " s-" + sev : "") + '"' +
+        ' data-kind="' + kind + '" data-sev="' + esc(sev) + '"' +
+        ' data-effort="' + esc(f.effort || "") + '" data-priority="' + esc(f.priority || "") + '"' +
+        ' data-feature="' + esc(feature.slug) + '" data-text="' + esc(text) + '">' +
+      '<div class="fhead">' + chips.join("") +
+        '<span class="ftitle">' + esc(f.title) + "</span>" +
+        '<span class="fid">' + esc(f.id || "") + "</span></div>" +
+      '<div class="fbody">' + rows + "</div>" +
+      '<div class="ev">' + paths(f.evidence) + "</div></div>";
+  }
+
+  /* ---------- feature drill-down ---------- */
+  function featureCard(f) {
+    var c = f.counts || {}, s = f.surface || {}, cov = f.coverage || {};
+    var surfaceRows = [
+      ["Routes", s.routes], ["Handlers", s.controllers], ["Packages", s.packages],
+      ["Models", s.models], ["UI", s.frontend_pages], ["Jobs / queues", s.queues_jobs],
+      ["External", s.external_deps]
+    ].filter(function (r) { return list(r[1]).length; }).map(function (r) {
+      return "<dt>" + r[0] + "</dt><dd>" + paths(r[1]) + "</dd>";
+    }).join("");
+
+    var covRows = [
+      ["Test files", cov.test_files], ["Tested", cov.tested_paths],
+      ["Untested", cov.untested_paths], ["Not inspected", cov.not_inspected]
+    ].map(function (r) {
+      var v = list(r[1]);
+      return "<dt>" + r[0] + "</dt><dd>" + (r[0] === "Test files"
+        ? paths(v)
+        : (v.length ? '<span class="small">' + esc(v.join(" · ")) + "</span>"
+                    : '<span class="faint tiny">—</span>')) + "</dd>";
+    }).join("");
+
+    var flows = list(f.user_flows).map(function (fl) {
+      var color = { working: "--st-good", partial: "--st-warning", broken: "--st-critical",
+                    not_implemented: "--muted" }[fl.status] || "--muted";
+      return '<li><span class="chip nowrap"><i class="sw" style="background:var(' + color +
+        ')"></i>' + esc(FLOW_LABEL[fl.status] || fl.status) + "</span><span><b>" +
+        esc(fl.name) + "</b>" +
+        (fl.breaks_at ? '<div class="fbreak">Breaks at: ' + esc(fl.breaks_at) + "</div>" : "") +
+        "</span></li>";
+    }).join("");
+
+    var findings =
+      list(f.bugs).map(function (x) { return finding("bug", x, f); }).join("") +
+      list(f.gaps).map(function (x) { return finding("gap", x, f); }).join("") +
+      list(f.opportunities).map(function (x) { return finding("opp", x, f); }).join("");
+
+    return '<details class="feat" id="' + esc(f.slug) + '" data-slug="' + esc(f.slug) +
+        '" data-maturity="' + esc(f.maturity) + '"><summary>' +
+        '<span class="chip"><i class="sw" style="background:var(--mat-' + esc(f.maturity) +
+          ')"></i>' + esc(MAT_LABEL[f.maturity] || f.maturity) + "</span>" +
+        '<span class="fname">' + esc(f.name || f.slug) + "</span>" +
+        '<span class="counts"><span class="fmatch"></span>' +
+          "<span>" + plural(c.bugs || 0, "bug") + "</span><span>" +
+          plural(c.gaps || 0, "gap") + "</span><span>" +
+          (c.opportunities || 0) + " opps</span><span>" +
+          ((c.test_files || 0) ? plural(c.test_files, "test")
+            : '<b style="color:var(--sev-high)">no tests</b>') + "</span></span></summary>" +
+      '<div class="body">' +
+        '<div class="sub"><p class="dim" style="font-size:14.5px;max-width:80ch">' +
+          esc(f.state_summary || "") + "</p>" +
+          '<div class="small faint">Confidence: ' + esc(f.confidence || "?") +
+          (list(f.dependencies).length
+            ? " · Depends on: " + esc(list(f.dependencies).join(", ")) : "") + "</div></div>" +
+        (flows ? '<div class="sub"><h4>User flows</h4><ul class="flows">' + flows + "</ul></div>" : "") +
+        (surfaceRows ? '<div class="sub"><h4>Surface</h4><dl class="kv">' + surfaceRows +
+          "</dl></div>" : "") +
+        '<div class="sub"><h4>Coverage</h4><dl class="kv">' + covRows + "</dl></div>" +
+        (findings ? '<div class="sub findings"><h4>Findings</h4>' + findings + "</div>"
+                  : '<div class="sub faint small">No findings reported.</div>') +
+        (list(f.open_questions).length
+          ? '<div class="sub"><h4>Open questions</h4><ul class="small dim">' +
+            list(f.open_questions).map(function (q) { return "<li>" + esc(q) + "</li>"; }).join("") +
+            "</ul></div>" : "") +
+      "</div></details>";
+  }
+
+  /* ---------- assemble ---------- */
+  function render() {
+    bar.innerHTML = topbar();
+    app.innerHTML = cover() + maturityBand() + tiles() + verdict() + severityChart() +
+      planning() + dependencies() + crossCutting() + priorities() + featureGrid() +
+      section("detail", "Every finding", "filter, then read", filters() +
+        FEATURES.map(featureCard).join("")) +
+      "<footer><span>Generated by <b>feature-recon</b> from " +
+        (T.features || FEATURES.length) + " feature state files</span>" +
+        "<span>Schema " + esc(P.schema_version || "1.0") + "</span>" +
+        "<span>Static read-only sweep — no runtime, no database, no tests executed</span></footer>";
+    wire();
+  }
+
+  /* ---------- interaction ---------- */
+  var state = { kinds: { bug: true, gap: true, opp: true }, sev: "all", mat: "all",
+                eff: "all", pri: "all", q: "" };
+
+  function applyFilters() {
+    var active = !state.kinds.bug || !state.kinds.gap || !state.kinds.opp ||
+      state.sev !== "all" || state.eff !== "all" || state.pri !== "all" || state.q !== "";
+    var shown = 0, total = 0;
+
+    Array.prototype.forEach.call(app.querySelectorAll("details.feat"), function (card) {
+      var matMatch = state.mat === "all" || card.dataset.maturity === state.mat;
+      var n = 0;
+      Array.prototype.forEach.call(card.querySelectorAll(".find"), function (f) {
+        var d = f.dataset;
+        total++;
+        var ok = state.kinds[d.kind] &&
+          (state.sev === "all" || (d.kind === "bug" && d.sev === state.sev)) &&
+          (state.eff === "all" || d.effort === state.eff) &&
+          (state.pri === "all" || d.priority === state.pri) &&
+          (!state.q || d.text.indexOf(state.q) >= 0);
+        f.classList.toggle("hidden", !ok);
+        if (ok) { n++; shown++; }
+      });
+      card.classList.toggle("hidden", !matMatch || (active && n === 0));
+      var badge = card.querySelector(".fmatch");
+      if (badge) badge.textContent = active && n ? n + " match" + (n === 1 ? "" : "es") : "";
+      if (active && n && matMatch) card.open = true;
+    });
+
+    Array.prototype.forEach.call(app.querySelectorAll("#matrix tbody tr"), function (tr) {
+      tr.classList.toggle("hidden", state.mat !== "all" && tr.dataset.maturity !== state.mat);
+    });
+    Array.prototype.forEach.call(app.querySelectorAll(".fcard"), function (b) {
+      var f = FEATURES.filter(function (x) { return x.slug === b.dataset.goto; })[0];
+      b.classList.toggle("hidden", !!(f && state.mat !== "all" && f.maturity !== state.mat));
+    });
+
+    document.getElementById("fcount").textContent =
+      active ? shown + " of " + total + " findings match" : total + " findings";
+  }
+
+  function sortTable(th) {
+    var key = th.dataset.sort, numeric = th.classList.contains("n");
+    /* First click: counts open at the biggest, names and maturity at the smallest. */
+    var asc = th.classList.contains("sorted") ? !th.classList.contains("asc") : !numeric;
+    Array.prototype.forEach.call(th.parentNode.children, function (h) {
+      h.classList.remove("sorted", "asc");
+    });
+    th.classList.add("sorted");
+    if (asc) th.classList.add("asc");
+    var tbody = th.closest("table").tBodies[0];
+    Array.prototype.slice.call(tbody.rows).sort(function (a, b) {
+      var x = a.dataset[key] || "", y = b.dataset[key] || "";
+      if (numeric) { x = +x; y = +y; }
+      else if (key === "maturity") { x = MATURITY.indexOf(x); y = MATURITY.indexOf(y); }
+      return (x < y ? -1 : x > y ? 1 : 0) * (asc ? 1 : -1);
+    }).forEach(function (tr) { tbody.appendChild(tr); });
+  }
+
+  function openFeature(slug) {
+    var card = document.getElementById(slug);
+    if (!card) return;
+    card.open = true;
+    card.scrollIntoView({ block: "start" });
+  }
+
+  function setTheme(mode) {
+    if (mode) document.documentElement.setAttribute("data-theme", mode);
+    else document.documentElement.removeAttribute("data-theme");
+    try { mode ? localStorage.setItem("recon-theme", mode) : localStorage.removeItem("recon-theme"); }
+    catch (e) { /* file:// with storage blocked — theme just won't persist */ }
+  }
+
+  function wire() {
+    var tipEl = document.getElementById("tip");
+    document.body.addEventListener("mouseover", function (e) {
+      var t = e.target.closest("[data-tip]");
+      if (!t) return;
+      tipEl.textContent = t.dataset.tip;
+      tipEl.classList.add("on");
+      var r = t.getBoundingClientRect();
+      tipEl.style.left = Math.min(window.innerWidth - 280,
+        Math.max(8, r.left + r.width / 2 - 135)) + "px";
+      tipEl.style.top = (r.top > 120 ? r.top - tipEl.offsetHeight - 10 : r.bottom + 10) + "px";
+    });
+    document.body.addEventListener("mouseout", function (e) {
+      if (e.target.closest("[data-tip]")) tipEl.classList.remove("on");
+    });
+
+    app.addEventListener("click", function (e) {
+      var th = e.target.closest("#matrix th[data-sort]");
+      if (th) { sortTable(th); return; }
+      var goto_ = e.target.closest("[data-goto]");
+      if (goto_) { openFeature(goto_.dataset.goto); return; }
+      var tr = e.target.closest("#matrix tbody tr");
+      if (tr) { openFeature(tr.dataset.slug); return; }
+      var row = e.target.closest("a.row");
+      if (row) { e.preventDefault(); openFeature(row.getAttribute("href").slice(1)); }
+    });
+
+    document.getElementById("kinds").addEventListener("click", function (e) {
+      var b = e.target.closest("button[data-kind]");
+      if (!b) return;
+      var on = b.getAttribute("aria-pressed") !== "true";
+      b.setAttribute("aria-pressed", on);
+      state.kinds[b.dataset.kind] = on;
+      applyFilters();
+    });
+
+    [["f-sev", "sev"], ["f-mat", "mat"], ["f-eff", "eff"], ["f-pri", "pri"]].forEach(function (p) {
+      document.getElementById(p[0]).addEventListener("change", function () {
+        state[p[1]] = this.value;
+        applyFilters();
+      });
+    });
+
+    var q = document.getElementById("f-q");
+    q.addEventListener("input", function () {
+      state.q = this.value.trim().toLowerCase();
+      applyFilters();
+    });
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "/" && e.target.tagName !== "INPUT" && e.target.tagName !== "SELECT") {
+        e.preventDefault();
+        q.focus();
+      }
+    });
+
+    document.getElementById("expand").addEventListener("click", function () {
+      var open = this.textContent.indexOf("Expand") === 0;
+      Array.prototype.forEach.call(app.querySelectorAll("details.feat"), function (d) {
+        d.open = open;
+      });
+      this.textContent = open ? "Collapse all" : "Expand all";
+    });
+
+    document.getElementById("copy").addEventListener("click", function () {
+      var btn = this;
+      navigator.clipboard.writeText(JSON.stringify(DATA, null, 2)).then(function () {
+        btn.textContent = "Copied";
+        setTimeout(function () { btn.textContent = "Copy JSON"; }, 1400);
+      }, function () { btn.textContent = "Copy failed"; });
+    });
+
+    document.getElementById("theme").addEventListener("click", function () {
+      var dark = matchMedia("(prefers-color-scheme: dark)").matches;
+      var cur = document.documentElement.getAttribute("data-theme") || (dark ? "dark" : "light");
+      setTheme(cur === "dark" ? "light" : "dark");
+    });
+
+    /* Rings animate from empty to their share once laid out. */
+    requestAnimationFrame(function () {
+      Array.prototype.forEach.call(document.querySelectorAll(".gauge circle.anim"), function (c) {
+        c.style.strokeDashoffset = c.dataset.off;
+      });
+    });
+
+    applyFilters();
+    openHash();
+  }
+
+  function openHash() {
+    var id = decodeURIComponent(location.hash.slice(1));
+    if (!id) return;
+    var card = document.getElementById(id);
+    if (card && card.tagName === "DETAILS") { card.open = true; card.scrollIntoView({ block: "start" }); }
+  }
+  window.addEventListener("hashchange", openHash);
+
+  try {
+    var saved = localStorage.getItem("recon-theme");
+    if (saved) document.documentElement.setAttribute("data-theme", saved);
+  } catch (e) { /* storage unavailable */ }
+
+  render();
+})();
+</script>
+</body>
+</html>

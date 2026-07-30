@@ -1,0 +1,19 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "feature-recon",
+  "description": "Codebase feature reconnaissance: per-feature maturity, bugs, gaps and opportunities with cited evidence, plus a dashboard.",
+  "owner": {
+    "name": "Ilyas Serter"
+  },
+  "plugins": [
+    {
+      "name": "feature-recon",
+      "description": "Reconnaissance sweep of any codebase, feature by feature: what works, what's broken, what's missing, what's untested. Emits one evidence-cited JSON state file per feature plus a rollup, then renders a self-contained HTML dashboard from them.",
+      "author": {
+        "name": "Ilyas Serter"
+      },
+      "source": "./",
+      "category": "productivity"
+    }
+  ]
+}
