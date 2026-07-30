@@ -1,4 +1,8 @@
-# feature-recon
+# Claude Code Feature-Recon Plugin
+
+![feature-recon key art](assets/feature-recon_featured-image.jpg)
+![feature-recon sample report](example-reports/Udeha/Udeha_recon_report_03.png)
+
 
 A Claude Code plugin that sweeps a codebase feature by feature and tells you, with citations, what
 works, what's broken, what's missing and what isn't tested — as JSON state files plus a
