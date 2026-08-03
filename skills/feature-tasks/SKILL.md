@@ -44,7 +44,7 @@ given: `--ids a-bug-01,b-gap-02` · `--feature billing` · `--severity critical`
 ends up spanning lenses anyway: a security finding and a product finding at the same choke point are
 one fix, and step 4 says merge them.
 
-If the selection exceeds ~10 tasks, write the top 10 and list the remainder in the index under
+If the selection exceeds ~20 tasks, write the top 20 and list the remainder in the index under
 "Not yet written" — a 40-task dump gets read by nobody.
 
 ### 3. Re-verify every finding against the current source — mandatory
